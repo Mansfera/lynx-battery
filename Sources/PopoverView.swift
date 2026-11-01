@@ -616,7 +616,7 @@ struct PowerTab: View {
 
     var body: some View {
         VStack(spacing: 10) {
-            if let b { PowerFlowStage(b: b) } else { MacPowerStage(model: model) }
+            if let b { PowerFlowStage(b: b, animating: model.popoverShown) } else { MacPowerStage(model: model) }
             Panel {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack {
@@ -780,6 +780,7 @@ struct MacPowerStage: View {
 /// товщина стрічки — вати, що йдуть цим шляхом. Ширини анімуються пружиною.
 struct PowerFlowStage: View {
     let b: BatterySnapshot
+    let animating: Bool
     @Environment(\.palette) private var pal
 
     var body: some View {
@@ -797,7 +798,8 @@ struct PowerFlowStage: View {
                        batteryToMac: max(0, -b.watts),
                        onAC: b.onAC,
                        adapterLabel: b.adapterWatts.map { "\($0)W" } ?? String(format: "%.0fW", b.inputWatts),
-                       pal: pal)
+                       pal: pal,
+                       animating: animating)
                     .frame(height: 150)
                     .animation(.interpolatingSpring(stiffness: 120, damping: 16), value: b.watts)
                     .animation(.interpolatingSpring(stiffness: 120, damping: 16), value: b.systemWatts)
@@ -823,6 +825,7 @@ struct Sankey: View, Animatable {
     let onAC: Bool
     let adapterLabel: String
     let pal: Palette
+    let animating: Bool
 
     var animatableData: AnimatablePair<Double, AnimatablePair<Double, Double>> {
         get { .init(adapterToBattery, .init(adapterToMac, batteryToMac)) }
@@ -832,13 +835,15 @@ struct Sankey: View, Animatable {
     private struct Flow { let from: Int; let to: Int; let w: Double }   // from: 0 адаптер, 1 батарея; to: 0 батарея, 1 Mac
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1 / 30)) { tl in
+        // Закритий поповер лише ховає вікно: без paused хвиля крутила б 30 кадрів/с вічно, коштом батареї.
+        // Підписи — поза TimelineView, щоб не верстати текст на кожен кадр.
+        TimelineView(.animation(minimumInterval: 1 / 30, paused: !animating)) { tl in
             let phase = tl.date.timeIntervalSinceReferenceDate
             Canvas { ctx, size in
                 draw(ctx: ctx, size: size, phase: phase)
             }
-            .overlay { labels }
         }
+        .overlay { labels }
     }
 
     private var flows: [Flow] {

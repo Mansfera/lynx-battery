@@ -21,6 +21,7 @@ final class BLEBattery: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate
     /// Показали, що Battery Service немає (Apple Watch, AirPods) — більше не турбуємо.
     private var noBattery: Set<UUID> = []
     private var lastScan = Date.distantPast
+    private var lastConnected = -1
     private let scanEvery: TimeInterval = 300
     private let scanFor: TimeInterval = 8
     /// Спарені пристрої (назва → тип) із DeviceReader.
@@ -39,13 +40,19 @@ final class BLEBattery: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate
         guard central == nil else { return }
         central = CBCentralManager(delegate: self, queue: .main)
         timer = Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in self?.poll() }
+        timer?.tolerance = 10
     }
 
     func poll() {
         guard let c = central, c.state == .poweredOn else { return }
-        Self.trace("poll: \(c.retrieveConnectedPeripherals(withServices: [batteryService]).count) connected with Battery Service")
         // Пристрої, які вже тримає система (iPhone через Continuity, навушники) і які мають Battery Service
-        for p in c.retrieveConnectedPeripherals(withServices: [batteryService]) {
+        let connected = c.retrieveConnectedPeripherals(withServices: [batteryService])
+        // У лог — лише зміни: інакше запис на диск кожні 30 с і файл, що росте без меж
+        if connected.count != lastConnected {
+            lastConnected = connected.count
+            Self.trace("poll: \(connected.count) connected with Battery Service")
+        }
+        for p in connected {
             if peripherals[p.identifier] == nil {
                 peripherals[p.identifier] = p
                 p.delegate = self

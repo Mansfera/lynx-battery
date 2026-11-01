@@ -5,6 +5,7 @@ final class ChargeControl: ObservableObject {
     @Published var config = ChargeConfig() { didSet { if config != oldValue { scheduleSave() } } }
     @Published private(set) var status: ChargeStatus?
     @Published private(set) var installed = false
+    @Published private(set) var helperOutdated = false
     @Published var busy = false
     @Published var error: String?
 
@@ -17,7 +18,16 @@ final class ChargeControl: ObservableObject {
         if let d = FileManager.default.contents(atPath: ChargePaths.config),
            let c = try? JSONDecoder().decode(ChargeConfig.self, from: d) { config = c.sanitized() }
         readStatus()
-        timer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in self?.readStatus() }
+        setVisible(false)
+    }
+
+    /// Хелпер пише стан раз на 15 с, а бачити його можна лише в поповері: у фоні читаємо рідко.
+    func setVisible(_ visible: Bool) {
+        guard !previewing else { return }
+        timer?.invalidate()
+        timer = Timer.scheduledTimer(withTimeInterval: visible ? 5 : 45, repeats: true) { [weak self] _ in self?.readStatus() }
+        timer?.tolerance = visible ? 1 : 10
+        if visible { readStatus(); checkHelper() }
     }
 
     /// Хелпер живий, якщо писав стан не пізніше хвилини тому.
@@ -27,12 +37,15 @@ final class ChargeControl: ObservableObject {
     var canDischarge: Bool { status.map { $0.capabilities.contains("charge-inhibit") && $0.capabilities.contains("adapter") } ?? false }
 
     /// Хелпер у бандлі новіший за встановлений — треба перевстановити (з паролем).
-    var helperOutdated: Bool {
-        guard installed else { return false }
-        let bundled = Bundle.main.bundleURL.appendingPathComponent("Contents/Library/LaunchServices/\(ChargePaths.label)")
-        guard let a = FileManager.default.contents(atPath: bundled.path),
-              let b = FileManager.default.contents(atPath: ChargePaths.helperBinary) else { return false }
-        return a != b
+    /// Читає обидва файли цілком, тож не з body вкладки, а при відкритті поповера й після встановлення.
+    private func checkHelper() {
+        helperOutdated = {
+            guard installed else { return false }
+            let bundled = Bundle.main.bundleURL.appendingPathComponent("Contents/Library/LaunchServices/\(ChargePaths.label)")
+            guard let a = FileManager.default.contents(atPath: bundled.path),
+                  let b = FileManager.default.contents(atPath: ChargePaths.helperBinary) else { return false }
+            return a != b
+        }()
     }
 
     func readStatus() {
@@ -84,6 +97,7 @@ final class ChargeControl: ObservableObject {
             try? FileManager.default.removeItem(at: staged)
             guard let self else { return }
             self.installed = FileManager.default.fileExists(atPath: ChargePaths.daemonPlist)
+            self.checkHelper()
             if ok && self.installed { self.config.enabled = true; self.save() }
             else if ok { self.error = "The helper didn't install — no daemon file was written." }
         }
@@ -127,6 +141,7 @@ final class ChargeControl: ObservableObject {
         """
         runAsAdmin(script) { [weak self] _ in
             self?.installed = FileManager.default.fileExists(atPath: ChargePaths.daemonPlist)
+            self?.checkHelper()
             self?.status = nil
         }
     }

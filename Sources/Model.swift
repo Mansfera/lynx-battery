@@ -16,6 +16,7 @@ final class AppModel: ObservableObject {
     @Published var apps: [AppEnergy] = []
     @Published var expandedApp: String?
     @Published var lowPowerBusy = false
+    @Published var popoverShown = false
     let energy = EnergyMonitor()
     let charge = ChargeControl()
     let ble = BLEBattery()
@@ -37,13 +38,16 @@ final class AppModel: ObservableObject {
             self?.refresh()
         }
         timer = Timer.scheduledTimer(withTimeInterval: 20, repeats: true) { [weak self] _ in self?.refresh() }
+        timer?.tolerance = 5
         ble.onChange = { [weak self] in self?.mergeDevices() }
         ble.start()
         refreshDevices()
         deviceTimer = Timer.scheduledTimer(withTimeInterval: 90, repeats: true) { [weak self] _ in self?.refreshDevices() }
+        deviceTimer?.tolerance = 15
         // Енергію по апках пишемо раз на 2 хв у фоні; поки поповер відкритий — частіше.
         sampleEnergy()
         energyTimer = Timer.scheduledTimer(withTimeInterval: 120, repeats: true) { [weak self] _ in self?.sampleEnergy() }
+        energyTimer?.tolerance = 20
     }
 
     func sampleEnergy() {
@@ -54,6 +58,7 @@ final class AppModel: ObservableObject {
     func toggleLowPower() {
         guard let b = battery, !lowPowerBusy else { return }
         let want = !b.lowPower
+        charge.readStatus()   // хелпер перевіряємо за свіжим станом: у фоні він читається рідше
         if charge.installed && charge.helperAlive {
             announceLowPower(want)
             charge.config.lowPower = want

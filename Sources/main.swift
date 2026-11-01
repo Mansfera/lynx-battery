@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 import Combine
 
-final class AppDelegate: NSObject, NSApplicationDelegate, SettingsOpener {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, SettingsOpener {
     private var item: NSStatusItem!
     private let popover = NSPopover()
     private let model = AppModel()
@@ -26,6 +26,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SettingsOpener {
 
         popover.behavior = .transient
         popover.animates = true
+        popover.delegate = self
         let host = NSHostingController(rootView: PopoverView(model: model))
         host.sizingOptions = .preferredContentSize   // поповер іде за висотою вмісту при зміні вкладок
         popover.contentViewController = host
@@ -49,6 +50,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SettingsOpener {
     @objc func openSettings() {
         popover.performClose(nil)
         settingsWindow.show()
+    }
+
+    func popoverWillShow(_ n: Notification) { setPopoverShown(true) }
+    func popoverDidClose(_ n: Notification) { setPopoverShown(false) }
+
+    private func setPopoverShown(_ shown: Bool) {
+        model.popoverShown = shown
+        model.charge.setVisible(shown)
     }
 
     private func updateIcon() {
