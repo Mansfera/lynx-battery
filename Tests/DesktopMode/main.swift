@@ -21,7 +21,11 @@ func save(_ rep: NSBitmapImageRep, _ name: String) {
 
 /// Без показу на екрані: вікно лише дає поповеру тему й розмір.
 func render(_ model: AppModel, _ name: String, dark: Bool = false) {
-    let host = NSHostingView(rootView: PopoverView(model: model))
+    render(view: PopoverView(model: model), name, dark: dark)
+}
+
+func render<V: View>(view: V, _ name: String, dark: Bool = false) {
+    let host = NSHostingView(rootView: view)
     let win = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 372, height: 900), styleMask: .borderless, backing: .buffered, defer: false)
     win.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
     win.contentView = host
@@ -128,8 +132,9 @@ render(model, "power-dark", dark: true)
 
 model.tab = .devices
 render(model, "devices")
-model.page = .settings
-render(model, "settings")
+render(view: GeneralSettings(model: model), "settings-general")
+render(view: AlertSettings(model: model), "settings-alerts")
+render(view: AboutSettings(model: model), "settings-about")
 #else
 model.refresh()
 let has = SystemPower.hasInternalBattery()

@@ -31,9 +31,11 @@ final class AlertEngine {
     func evaluate(_ b: BatterySnapshot) {
         defer { prev = b }
         evaluateHeat(b)
+        // Повноекранний поріг — теж поріг: інакше на 3 % після вже пройдених 5 % нічого не спрацює
+        let low = s.fullScreenAt > 0 ? s.lowAlerts.union([s.fullScreenAt]) : s.lowAlerts
         guard let p = prev else {
             // Старт: вважаємо вже пройденими пороги, за якими ми зараз стоїмо, щоб не спамити.
-            firedLow = Set(s.lowAlerts.filter { b.percent <= $0 })
+            firedLow = Set(low.filter { b.percent <= $0 })
             firedHigh = Set(s.highAlerts.filter { b.percent >= $0 })
             return
         }
@@ -53,8 +55,8 @@ final class AlertEngine {
 
         // Низький заряд: спрацьовує, коли рівень опускається до порогу без зарядки.
         if !b.onAC {
-            for t in s.lowAlerts.sorted() where b.percent <= t && !firedLow.contains(t) {
-                firedLow.formUnion(s.lowAlerts.filter { $0 >= t })
+            for t in low.sorted() where b.percent <= t && !firedLow.contains(t) {
+                firedLow.formUnion(low.filter { $0 >= t })
                 if s.fullScreenAt > 0 && b.percent <= s.fullScreenAt {
                     presenter.showFullScreen(percent: b.percent)
                 } else {

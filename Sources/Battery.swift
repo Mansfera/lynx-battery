@@ -150,12 +150,12 @@ enum BatteryReader {
 
 enum LowPowerMode {
     /// pmset потребує прав адміністратора — macOS сама попросить пароль.
-    static func set(_ on: Bool, completion: @escaping () -> Void) {
+    static func set(_ on: Bool, completion: @escaping (Bool) -> Void) {
         DispatchQueue.global().async {
             let src = "do shell script \"/usr/bin/pmset -a lowpowermode \(on ? 1 : 0)\" with administrator privileges"
             var err: NSDictionary?
             NSAppleScript(source: src)?.executeAndReturnError(&err)
-            DispatchQueue.main.async(execute: completion)
+            DispatchQueue.main.async { completion(err == nil) }
         }
     }
 }

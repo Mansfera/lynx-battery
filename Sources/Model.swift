@@ -9,10 +9,8 @@ final class AppModel: ObservableObject {
     static let wattInterval: TimeInterval = 3
     @Published var devices: [BTDevice] = []
     @Published var range: HistoryRange = .day
-    @Published var page: Page = .main
     @Published private(set) var historyTick = 0
 
-    enum Page { case main, settings }
     enum Tab: String, CaseIterable, Identifiable { case overview = "Overview", charge = "Charge", power = "Power", devices = "Devices"; var id: String { rawValue } }
     @Published var tab: Tab = .overview
     @Published var apps: [AppEnergy] = []
@@ -54,21 +52,27 @@ final class AppModel: ObservableObject {
 
     /// Енергозбереження: через хелпер (без пароля), інакше — pmset з паролем адміністратора.
     func toggleLowPower() {
-        guard let b = battery else { return }
+        guard let b = battery, !lowPowerBusy else { return }
         let want = !b.lowPower
-        alerts.presenter.show(AlertSpec(title: want ? "Low Power Mode on" : "Low Power Mode off",
-                                        subtitle: want ? "Dimmer, quieter, longer on battery" : "Back to full performance",
-                                        symbol: want ? "leaf.fill" : "leaf", tone: want ? .saver : .neutral))
         if charge.installed && charge.helperAlive {
+            announceLowPower(want)
             charge.config.lowPower = want
             charge.config.lowPowerRequestAt = Date()
             return
         }
         lowPowerBusy = true
-        LowPowerMode.set(want) { [weak self] in
+        LowPowerMode.set(want) { [weak self] ok in
             self?.lowPowerBusy = false
+            // Пароль скасували — режим не змінився, тож і сповіщати нема про що
+            if ok { self?.announceLowPower(want) }
             self?.refresh()
         }
+    }
+
+    private func announceLowPower(_ on: Bool) {
+        alerts.presenter.show(AlertSpec(title: on ? "Low Power Mode on" : "Low Power Mode off",
+                                        subtitle: on ? "Dimmer, quieter, longer on battery" : "Back to full performance",
+                                        symbol: on ? "leaf.fill" : "leaf", tone: on ? .saver : .neutral))
     }
 
     func refresh() {
@@ -129,18 +133,4 @@ final class AppModel: ObservableObject {
         alerts.evaluate(devices: list)
         onChange?()
     }
-
-    func testAlert() {
-        guard battery != nil else {
-            // Без батареї сповіщення бувають лише про пристрої
-            alerts.presenter.show(AlertSpec(title: "Magic Mouse: 15%", subtitle: "This is how alerts look",
-                                            symbol: "magicmouse", tone: .low))
-            return
-        }
-        let p = battery?.percent ?? 15
-        alerts.presenter.show(AlertSpec(title: "\(p)% left", subtitle: "This is how alerts look",
-                                        symbol: "battery.25percent", tone: .low))
-    }
-
-    func testFullScreen() { alerts.presenter.showFullScreen(percent: 2) }
 }

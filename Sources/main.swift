@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 import Combine
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, SettingsOpener {
     private var item: NSStatusItem!
     private let popover = NSPopover()
     private let model = AppModel()
@@ -13,9 +13,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var phase = 0
     private var sweepFrames = 0
     private var wasCharging = false
+    private lazy var settingsWindow = SettingsWindow(model: model)
 
     func applicationDidFinishLaunching(_ n: Notification) {
         Brand.registerFonts()
+        AppMenu.installMainMenu()
         item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         item.button?.target = self
         item.button?.action = #selector(toggle)
@@ -40,12 +42,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if let tab = (n.object as? String).flatMap(AppModel.Tab.init(rawValue:)) { self?.model.tab = tab }
             if self?.popover.isShown == false { self?.toggle() }
         }
-        DistributedNotificationCenter.default().addObserver(forName: Notification.Name("xyz.etherlynx.battery.test"), object: nil, queue: .main) { [weak self] _ in
-            self?.model.testAlert()
-        }
     }
 
     func applicationWillTerminate(_ n: Notification) { model.history.save() }
+
+    @objc func openSettings() {
+        popover.performClose(nil)
+        settingsWindow.show()
+    }
 
     private func updateIcon() {
         guard let button = item.button else { return }
@@ -96,7 +100,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if popover.isShown {
             popover.performClose(nil)
         } else {
-            model.page = .main
             model.refresh()
             model.refreshDevices()
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)

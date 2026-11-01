@@ -9,17 +9,12 @@ struct PopoverView: View {
 
     var body: some View {
         let pal = Palette(scheme: scheme)
-        Group {
-            switch model.page {
-            case .main: MainPage(model: model)
-            case .settings: SettingsPage(model: model)
-            }
-        }
-        .frame(width: 372)
-        .background(pal.bg)
-        .foregroundStyle(pal.fg)
-        .environment(\.palette, pal)
-        .font(Brand.text(12))
+        MainPage(model: model)
+            .frame(width: 372)
+            .background(pal.bg)
+            .foregroundStyle(pal.fg)
+            .environment(\.palette, pal)
+            .font(Brand.text(12))
     }
 }
 
@@ -68,19 +63,6 @@ struct Stage<Content: View>: View {
             .padding(18)
             .frame(maxWidth: .infinity, alignment: .topLeading)
             .background(pal.stage.clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous)))
-    }
-}
-
-struct Label2: View {
-    @Environment(\.palette) private var pal
-    let text: String
-    var trailing: String? = nil
-    var body: some View {
-        HStack {
-            Text(text).font(Brand.text(11, .medium)).foregroundStyle(pal.muted)
-            Spacer()
-            if let t = trailing { Text(t).font(Brand.text(11)).foregroundStyle(pal.muted) }
-        }
     }
 }
 
@@ -134,14 +116,16 @@ struct TopBar: View {
                 .buttonStyle(.plain)
             }
             Spacer()
-            Button { withAnimation(.snappy) { model.page = .settings } } label: {
+            Button { NSApp.sendAction(#selector(SettingsOpener.openSettings), to: nil, from: nil) } label: {
                 ZStack {
                     Circle().fill(pal.fg)
-                    Image(systemName: "line.3.horizontal").font(.system(size: 11, weight: .semibold)).foregroundStyle(pal.bg)
+                    Image(systemName: "gearshape.fill").font(.system(size: 13)).foregroundStyle(pal.bg)
                 }
                 .frame(width: 30, height: 30)
             }
             .buttonStyle(.plain)
+            .help("Settings")
+            .accessibilityLabel("Settings")
         }
     }
 }
@@ -1077,183 +1061,6 @@ struct Part: View {
         HStack(spacing: 3) {
             if let label { Text(label).font(Brand.text(10.5)).foregroundStyle(pal.muted) }
             Text("\(p)%").font(Brand.mono(11, .semibold)).foregroundStyle(pal.level(p))
-        }
-    }
-}
-
-// MARK: - Налаштування
-
-struct SettingsPage: View {
-    @ObservedObject var model: AppModel
-    @ObservedObject var s = Settings.shared
-    @Environment(\.palette) private var pal
-    private var hasBattery: Bool { model.battery != nil }
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                Button { withAnimation(.snappy) { model.page = .main } } label: {
-                    ZStack {
-                        Circle().fill(pal.fg)
-                        Image(systemName: "arrow.left").font(.system(size: 11, weight: .semibold)).foregroundStyle(pal.bg)
-                    }
-                    .frame(width: 30, height: 30)
-                }
-                .buttonStyle(.plain)
-                Text("Settings").font(Brand.display(22)).tracking(-0.6)
-                Spacer()
-            }
-
-            FitScroll {
-                VStack(alignment: .leading, spacing: 10) {
-                    if hasBattery {
-                        Panel {
-                            VStack(alignment: .leading, spacing: 10) {
-                                Label2(text: "Alert when the battery drops to")
-                                ThresholdInput(values: $s.lowAlerts, range: 1...99)
-                                Label2(text: "Alert when it's charged to")
-                                ThresholdInput(values: $s.highAlerts, range: 50...100)
-                            }
-                        }
-                    }
-                    Panel {
-                        VStack(alignment: .leading, spacing: 8) {
-                            if hasBattery {
-                                Row("Charger connected") { Toggle("", isOn: $s.onPlug).labelsHidden() }
-                                Row("Charger disconnected") { Toggle("", isOn: $s.onUnplug).labelsHidden() }
-                                Row("Battery too hot") { Toggle("", isOn: $s.heatAlert).labelsHidden() }
-                            }
-                            Row("Screen glow") { Toggle("", isOn: $s.glow).labelsHidden() }
-                            Row("Keep alerts until clicked") { Toggle("", isOn: $s.persistent).labelsHidden() }
-                            if hasBattery {
-                                Row("Full-screen alert at") { Picker("", selection: $s.fullScreenAt) {
-                                    Text("Off").tag(0)
-                                    ForEach([1, 2, 3, 5], id: \.self) { Text("\($0)%").tag($0) }
-                                }.labelsHidden().frame(width: 100) }
-                            }
-                            Row("Default device alert") { Picker("", selection: $s.deviceLowAt) {
-                                Text("Off").tag(0)
-                                ForEach([5, 10, 15, 20, 30], id: \.self) { Text("\($0)%").tag($0) }
-                            }.labelsHidden().frame(width: 100) }
-                            Row("Sound") { Picker("", selection: $s.sound) {
-                                ForEach(Settings.sounds, id: \.self) { Text($0).tag($0) }
-                            }.labelsHidden().frame(width: 100) }
-                            .onChange(of: s.sound) { _, v in NSSound(named: NSSound.Name(v))?.play() }
-                        }
-                    }
-                    Panel {
-                        VStack(alignment: .leading, spacing: 8) {
-                            if hasBattery {
-                                Row("Battery percentage") { Picker("", selection: $s.percentMode) {
-                                    ForEach(PercentMode.allCases) { Text($0.rawValue).tag($0) }
-                                }.labelsHidden().frame(width: 170) }
-                                Text(s.percentMode.detail).font(Brand.text(10.5)).foregroundStyle(pal.muted)
-                                    .fixedSize(horizontal: false, vertical: true)
-                                Divider().overlay(pal.line)
-                                Row("Menu bar icon") { Picker("", selection: $s.iconStyle) {
-                                    ForEach(IconStyle.allCases) { Text($0.rawValue).tag($0) }
-                                }.labelsHidden().frame(width: 140) }
-                            }
-                            Row("Colour by level") { Toggle("", isOn: $s.smartColors).labelsHidden() }
-                            if hasBattery {
-                                Row("Animate while charging") { Toggle("", isOn: $s.animateCharging).labelsHidden() }
-                            }
-                            Row("Open at login") { Toggle("", isOn: $s.launchAtLogin).labelsHidden() }
-                        }
-                    }
-                    HStack(spacing: 8) {
-                        InkPill(title: "Test alert") { model.testAlert() }
-                        if hasBattery { InkPill(title: "Test full-screen") { model.testFullScreen() } }
-                        Spacer()
-                        Button("Quit") { NSApp.terminate(nil) }
-                            .buttonStyle(.plain).font(Brand.text(12, .medium)).foregroundStyle(pal.muted)
-                    }
-                    .padding(.horizontal, 2)
-                }
-                .padding(.bottom, 2)
-            }
-        }
-        .toggleStyle(.switch)
-        .controlSize(.small)
-        .tint(pal.toggleTint)
-        .padding(12)
-    }
-}
-
-private struct Row<Control: View>: View {
-    let title: String
-    @ViewBuilder let control: Control
-    init(_ title: String, @ViewBuilder control: () -> Control) { self.title = title; self.control = control() }
-    var body: some View {
-        HStack { Text(title).font(Brand.text(12.5)); Spacer(); control }.frame(minHeight: 22)
-    }
-}
-
-/// Пороги — вибрані значення чипами з хрестиком і поле вводу: «15» або «15, 25».
-struct ThresholdInput: View {
-    @Binding var values: Set<Int>
-    let range: ClosedRange<Int>
-    @State private var text = ""
-    @State private var bad = false
-    @Environment(\.palette) private var pal
-
-    var body: some View {
-        FlowRow(spacing: 6) {
-            ForEach(values.sorted(), id: \.self) { v in
-                Button { values.remove(v) } label: {
-                    HStack(spacing: 5) {
-                        Text("\(v)%").font(Brand.text(11.5, .medium)).monospacedDigit()
-                        Image(systemName: "xmark").font(.system(size: 8, weight: .bold)).opacity(0.6)
-                    }
-                    .padding(.horizontal, 11).padding(.vertical, 6)
-                    .background(pal.fg, in: Capsule())
-                    .foregroundStyle(pal.bg)
-                }
-                .buttonStyle(.plain)
-            }
-            HStack(spacing: 2) {
-                TextField("Add %", text: $text)
-                    .textFieldStyle(.plain)
-                    .font(Brand.text(11.5, .medium))
-                    .frame(width: 56)
-                    .onSubmit(add)
-                Text("\(range.lowerBound)–\(range.upperBound)").font(Brand.text(9.5)).foregroundStyle(bad ? Brand.signal : pal.muted)
-            }
-            .padding(.horizontal, 11).padding(.vertical, 6)
-            .background(pal.sunk, in: Capsule())
-            .overlay(Capsule().strokeBorder(bad ? Brand.signal : .clear))
-        }
-    }
-
-    private func add() {
-        let nums = text.split(whereSeparator: { !$0.isNumber }).compactMap { Int($0) }
-        let ok = nums.filter { range.contains($0) }
-        bad = ok.count != nums.count || nums.isEmpty
-        values.formUnion(ok)
-        if !bad { text = "" }
-    }
-}
-
-/// Простий перенос рядків для чипів.
-struct FlowRow: Layout {
-    var spacing: CGFloat = 6
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let maxW = proposal.width ?? 300
-        var x: CGFloat = 0, y: CGFloat = 0, row: CGFloat = 0
-        for v in subviews {
-            let s = v.sizeThatFits(.unspecified)
-            if x > 0 && x + s.width > maxW { x = 0; y += row + spacing; row = 0 }
-            x += s.width + spacing; row = max(row, s.height)
-        }
-        return CGSize(width: maxW, height: y + row)
-    }
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        var x = bounds.minX, y = bounds.minY, row: CGFloat = 0
-        for v in subviews {
-            let s = v.sizeThatFits(.unspecified)
-            if x > bounds.minX && x + s.width > bounds.maxX { x = bounds.minX; y += row + spacing; row = 0 }
-            v.place(at: CGPoint(x: x, y: y), proposal: .unspecified)
-            x += s.width + spacing; row = max(row, s.height)
         }
     }
 }

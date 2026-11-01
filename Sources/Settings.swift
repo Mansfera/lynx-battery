@@ -74,6 +74,12 @@ final class Settings: ObservableObject {
         }
     }
 
+    /// Автозапуск могли вимкнути в System Settings, поки апка працювала.
+    func syncLaunchAtLogin() {
+        let on = SMAppService.mainApp.status == .enabled
+        if launchAtLogin != on { launchAtLogin = on }
+    }
+
     private init() {
         d.register(defaults: [
             "low": [20, 10, 5], "high": [80], "plug": true, "unplug": true,
