@@ -825,8 +825,6 @@ struct Sankey: View, Animatable {
 
     // Геометрія: вузли — колонки з великим радіусом, як на референсі
     private let nodeW: CGFloat = 54, gap: CGFloat = 12, minBand: CGFloat = 26
-    /// Джерело нижче за споживачів — стрічки розходяться віялом, як на референсі.
-    private let taper: CGFloat = 0.8
 
     private struct Layout {
         var left: [Int: CGRect] = [:], right: [Int: CGRect] = [:]
@@ -836,43 +834,34 @@ struct Sankey: View, Animatable {
     private func layout(_ size: CGSize) -> Layout {
         let fs = flows
         let total = fs.reduce(0) { $0 + $1.w }
-        let usable = size.height - gap * CGFloat(max(0, Set(fs.map(\.to)).count - 1))
-        func h(_ w: Double) -> CGFloat { max(minBand, usable * CGFloat(w / max(total, 0.01))) }
-        let bandHeights = fs.map { h($0.w) }
-        let scale = min(1, usable / bandHeights.reduce(0, +))
-        var L = Layout()
-
-        // Ліві вузли: адаптер зверху, батарея знизу
-        var y: CGFloat = 0
-        for src in [0, 1] {
-            let hs = fs.indices.filter { fs[$0].from == src }.map { bandHeights[$0] * scale * taper }
-            guard !hs.isEmpty else { continue }
-            let hh = hs.reduce(0, +)
-            L.left[src] = CGRect(x: 0, y: y, width: nodeW, height: hh); y += hh + gap
+        // Товщини стрічок, що разом дають рівно `available`: пропорційно ватам, але не менше за minBand.
+        // Нестачу тонких стрічок забираємо лише з надлишку товстих, тож без тонких пропорція точна.
+        func thicknesses(_ available: CGFloat) -> [CGFloat] {
+            let excess = fs.map { max(0, available * CGFloat($0.w / max(total, 0.01)) - minBand) }
+            let k = (available - minBand * CGFloat(fs.count)) / max(excess.reduce(0, +), 0.01)
+            return excess.map { minBand + $0 * k }
         }
-        // Праві вузли: батарея зверху, Mac знизу
-        y = 0
-        for dst in [0, 1] {
-            let hs = fs.indices.filter { fs[$0].to == dst }.map { bandHeights[$0] * scale }
-            guard !hs.isEmpty else { continue }
-            let hh = hs.reduce(0, +)
-            L.right[dst] = CGRect(x: size.width - nodeW, y: y, width: nodeW, height: hh); y += hh + gap
+        // Кожна колонка заповнює всю висоту, зі своїми проміжками між вузлами, тому краї збігаються.
+        func column(_ node: (Flow) -> Int, x: CGFloat) -> (nodes: [Int: CGRect], bands: [CGFloat]) {
+            let ids = [0, 1].filter { id in fs.contains { node($0) == id } }
+            let bands = thicknesses(size.height - gap * CGFloat(max(0, ids.count - 1)))
+            var nodes: [Int: CGRect] = [:], y: CGFloat = 0
+            for id in ids {
+                let hh = fs.indices.filter { node(fs[$0]) == id }.map { bands[$0] }.reduce(0, +)
+                nodes[id] = CGRect(x: x, y: y, width: nodeW, height: hh); y += hh + gap
+            }
+            return (nodes, bands)
         }
-        // Вертикальне центрування колонок
-        func center(_ d: inout [Int: CGRect]) {
-            let maxY = d.values.map(\.maxY).max() ?? 0
-            let dy = (size.height - maxY) / 2
-            for k in d.keys { d[k] = d[k]!.offsetBy(dx: 0, dy: dy) }
-        }
-        center(&L.left); center(&L.right)
+        let src = column(\.from, x: 0)                     // адаптер зверху, батарея знизу
+        let dst = column(\.to, x: size.width - nodeW)      // батарея зверху, Mac знизу
+        var L = Layout(left: src.nodes, right: dst.nodes)
 
         var outY: [Int: CGFloat] = L.left.mapValues(\.minY), inY: [Int: CGFloat] = L.right.mapValues(\.minY)
         for (i, f) in fs.enumerated() {
-            let bh = bandHeights[i] * scale
             guard let a = L.left[f.from], let r = L.right[f.to] else { continue }
-            let s = CGRect(x: a.maxX + 8, y: outY[f.from]!, width: 0, height: bh * taper)
-            let e = CGRect(x: r.minX - 8, y: inY[f.to]!, width: 0, height: bh)
-            outY[f.from]! += bh * taper; inY[f.to]! += bh
+            let s = CGRect(x: a.maxX + 8, y: outY[f.from]!, width: 0, height: src.bands[i])
+            let e = CGRect(x: r.minX - 8, y: inY[f.to]!, width: 0, height: dst.bands[i])
+            outY[f.from]! += src.bands[i]; inY[f.to]! += dst.bands[i]
             L.bands.append((f, s, e))
         }
         return L
@@ -920,7 +909,9 @@ struct Sankey: View, Animatable {
                         .opacity(s.height >= 22 ? 1 : 0)
                 }
                 if let a = L.left[0] {
-                    VStack(spacing: 4) {
+                    // У низькому вузлі значок і підпис стають в один рядок, інакше вилазять за його межі
+                    let stack = a.height >= 44 ? AnyLayout(VStackLayout(spacing: 4)) : AnyLayout(HStackLayout(spacing: 4))
+                    stack {
                         Image(systemName: "powerplug.portrait.fill").font(.system(size: 15))
                         Text(adapterLabel).font(Brand.text(12, .medium))
                     }
