@@ -2,7 +2,7 @@ import Foundation
 
 /// Апка пише налаштування ліміту, root-хелпер їх виконує й звітує стан.
 final class ChargeControl: ObservableObject {
-    @Published var config = ChargeConfig() { didSet { if config != oldValue { scheduleSave() } } }
+    @Published var config = ChargeConfig() { didSet { if config != oldValue && !loadingFromFile { scheduleSave() } } }
     @Published private(set) var status: ChargeStatus?
     @Published private(set) var installed = false
     @Published private(set) var helperOutdated = false
@@ -10,6 +10,7 @@ final class ChargeControl: ObservableObject {
     @Published var error: String?
 
     private var saveWork: DispatchWorkItem?
+    private var loadingFromFile = false
     private var previewing = false
     private var timer: Timer?
 
@@ -33,8 +34,21 @@ final class ChargeControl: ObservableObject {
     /// Хелпер живий, якщо писав стан не пізніше хвилини тому.
     var helperAlive: Bool { status.map { Date().timeIntervalSince($0.updated) < 60 } ?? false }
     var adapterOnly: Bool { status.map { !$0.capabilities.contains("charge-inhibit") && $0.capabilities.contains("adapter") } ?? false }
+    /// Ліміт тримається від розетки: лише цей стан малює іконку синім.
+    var holdingOnWall: Bool { helperAlive && status?.wallHold == true }
+    /// Межа в прошивці діє й уві сні, тож не спати до ліміту не потрібно.
+    var limitWorksAsleep: Bool { status?.capabilities.contains("firmware-limit") ?? false }
     /// Розряд до ліміту можливий, лише коли є обидва важелі.
     var canDischarge: Bool { status.map { $0.capabilities.contains("charge-inhibit") && $0.capabilities.contains("adapter") } ?? false }
+
+    /// Ліміт задано у відсотку, який показує апка: при зміні режиму переводимо число, а фізична межа лишається та сама.
+    func adoptScale(_ scale: ChargeScale, _ raw: BatterySnapshot) {
+        let old = config.scale ?? .trueCharge
+        if config.scale == scale { return }
+        let wasTop = config.limit >= old.top(raw)
+        config.limit = wasTop ? scale.top(raw) : min(scale.top(raw), old.convert(config.limit, to: scale, raw))
+        config.scale = scale
+    }
 
     /// Хелпер у бандлі новіший за встановлений — треба перевстановити (з паролем).
     /// Читає обидва файли цілком, тож не з body вкладки, а при відкритті поповера й після встановлення.
@@ -55,10 +69,13 @@ final class ChargeControl: ObservableObject {
         guard let d = FileManager.default.contents(atPath: ChargePaths.status),
               let s = try? dec.decode(ChargeStatus.self, from: d) else { status = nil; return }
         if s != status { status = s }
-        // Хелпер сам скидає Top Up після 100 % — підхоплюємо
-        if let d = FileManager.default.contents(atPath: ChargePaths.config),
-           let c = try? JSONDecoder().decode(ChargeConfig.self, from: d), c.topUp != config.topUp {
-            config.topUp = c.topUp
+        // Файл міг змінити хелпер (скидає Top Up після 100 %) чи інша копія апки: підхоплюємо все й не пишемо назад,
+        // інакше застарілі значення з пам'яті затруть файл. Поки є незбережена зміна, вона новіша за файл.
+        if saveWork == nil, let d = FileManager.default.contents(atPath: ChargePaths.config),
+           let c = try? JSONDecoder().decode(ChargeConfig.self, from: d), c.sanitized() != config {
+            loadingFromFile = true
+            config = c.sanitized()
+            loadingFromFile = false
         }
     }
 
@@ -70,6 +87,7 @@ final class ChargeControl: ObservableObject {
     }
 
     private func save() {
+        saveWork = nil
         guard installed, let d = try? JSONEncoder().encode(config.sanitized()) else { return }
         do { try d.write(to: URL(fileURLWithPath: ChargePaths.config), options: .atomic) }
         catch { self.error = "Couldn't save the charge settings: \(error.localizedDescription)" }

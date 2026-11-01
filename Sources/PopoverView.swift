@@ -452,9 +452,11 @@ struct ChargeTab: View {
                             Toggle2("Discharge to the limit", detail: "If the battery is above the limit when you plug in, run on battery down to it.",
                                     isOn: $control.config.discharge) { EmptyView() }
                         }
-                        Divider().overlay(pal.line)
-                        Toggle2("Stay awake until the limit", detail: "A sleeping Mac would charge past the limit to 100%.",
-                                isOn: $control.config.sleepUntilLimit) { EmptyView() }
+                        if !control.limitWorksAsleep {
+                            Divider().overlay(pal.line)
+                            Toggle2("Stay awake until the limit", detail: "A sleeping Mac would charge past the limit to 100%.",
+                                    isOn: $control.config.sleepUntilLimit) { EmptyView() }
+                        }
                         if control.status?.capabilities.contains("led") ?? true {
                             Divider().overlay(pal.line)
                             Toggle2("MagSafe light", detail: "Green while holding the limit, amber while charging to it.",
@@ -523,14 +525,14 @@ struct LimitStage: View {
                     Toggle("", isOn: $control.config.enabled).labelsHidden().toggleStyle(.switch).tint(pal.toggleTint)
                 }
                 Slider(value: Binding(get: { Double(control.config.limit) },
-                                      set: { control.config.limit = Int(($0 / 5).rounded() * 5) }),
-                       in: 50...100)
+                                      set: { control.config.limit = Int($0.rounded()) }),
+                       in: limitRange)
                     .tint(pal.fg)
                     .disabled(!control.config.enabled)
                 Text(stateLine).font(Brand.text(12.5, .medium))
                     .foregroundStyle(control.status?.mode == .heat || control.status?.mode == .unsupported ? Brand.signal : pal.fg.opacity(0.75))
                     .fixedSize(horizontal: false, vertical: true)
-                if control.config.enabled && control.config.limit < 100 {
+                if control.config.enabled && control.config.limit < Int(limitRange.upperBound) {
                     InkPill(title: control.config.topUp ? "Topping up — tap to cancel" : "Top up to 100% once",
                             symbol: control.config.topUp ? "xmark" : "bolt.fill") {
                         control.config.topUp.toggle()
@@ -541,6 +543,14 @@ struct LimitStage: View {
         .opacity(control.config.enabled ? 1 : 0.85)
     }
 
+    /// Межі повзунка у відсотку, який бачить користувач: нижня — 50 % справжнього заряду, верхня — повний заряд у цьому режимі.
+    private var limitRange: ClosedRange<Double> {
+        let scale = control.config.scale ?? .trueCharge
+        let top = scale == .ofDesign ? b.designTop : 100
+        let low = scale == .ofDesign ? 50 * b.designTop / 100 : 50
+        return Double(min(low, top - 1))...Double(top)
+    }
+
     private var stateLine: String {
         guard control.helperAlive, let s = control.status else {
             return control.installed ? "Waiting for the helper to report…" : "Helper not installed"
@@ -549,12 +559,13 @@ struct LimitStage: View {
         let c = control.config
         switch s.mode {
         case .off: return c.enabled ? "On battery — the limit applies when you plug in" : "Limit off — charging normally to 100%"
-        case .charging: return "Charging to \(c.limit)%"
+        case .charging: return c.limit >= Int(limitRange.upperBound) ? "Charging to full" : "Charging to \(c.limit)%"
         case .holding:
             if s.percent > c.limit + 1 {
                 return "Not charging — \(s.percent)% is above the \(c.limit)% limit. Use it down; charging resumes at \(c.sailing ? c.limit - c.sailRange : c.limit - 1)%."
             }
-            return c.sailing ? "Holding \(c.limit)% · charges again at \(c.limit - c.sailRange)%" : "Holding at \(c.limit)%"
+            let wall = s.wallHold == true ? " on wall power" : ""
+            return c.sailing ? "Holding \(c.limit)%\(wall) · charges again at \(c.limit - c.sailRange)%" : "Holding at \(c.limit)%\(wall)"
         case .discharging: return "Above the limit — running on battery down to \(c.limit)%"
         case .heat: return String(format: "Paused — battery is %.0f°, waiting for it to cool", s.temperature ?? 0)
         case .topUp: return "Topping up to 100%, then back to \(c.limit)%"
@@ -616,7 +627,7 @@ struct PowerTab: View {
 
     var body: some View {
         VStack(spacing: 10) {
-            if let b { PowerFlowStage(b: b, animating: model.popoverShown) } else { MacPowerStage(model: model) }
+            if let b { PowerFlowStage(b: b, animating: model.popoverShown, holdingOnWall: b.onAC && model.charge.holdingOnWall) } else { MacPowerStage(model: model) }
             Panel {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack {
@@ -781,6 +792,7 @@ struct MacPowerStage: View {
 struct PowerFlowStage: View {
     let b: BatterySnapshot
     let animating: Bool
+    var holdingOnWall = false
     @Environment(\.palette) private var pal
 
     var body: some View {
@@ -795,7 +807,8 @@ struct PowerFlowStage: View {
                 }
                 Sankey(adapterToBattery: b.onAC && b.isCharging ? max(0, b.watts) : 0,
                        adapterToMac: b.onAC ? max(0, b.systemWatts - max(0, -b.watts)) : 0,
-                       batteryToMac: max(0, -b.watts),
+                       // Без адаптера Mac живе лише від батареї, навіть якщо струм ще не оновився (буває до хвилини)
+                       batteryToMac: b.onAC ? max(0, -b.watts) : max(-b.watts, b.systemWatts),
                        onAC: b.onAC,
                        adapterLabel: b.adapterWatts.map { "\($0)W" } ?? String(format: "%.0fW", b.inputWatts),
                        pal: pal,
@@ -803,7 +816,10 @@ struct PowerFlowStage: View {
                     .frame(height: 150)
                     .animation(.interpolatingSpring(stiffness: 120, damping: 16), value: b.watts)
                     .animation(.interpolatingSpring(stiffness: 120, damping: 16), value: b.systemWatts)
-                if warn {
+                if holdingOnWall {
+                    Text("Holding the limit: the adapter runs the Mac and the battery is resting.")
+                        .font(Brand.text(11)).foregroundStyle(Color(nsColor: .systemBlue)).fixedSize(horizontal: false, vertical: true)
+                } else if warn {
                     Text("Plugged in, but the battery is still draining. The charger or cable gives less than the Mac uses — try a stronger adapter or another cable.")
                         .font(Brand.text(11)).foregroundStyle(Brand.signal).fixedSize(horizontal: false, vertical: true)
                 } else if b.drainingOnAC, let a = b.adapterWatts {

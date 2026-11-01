@@ -1,10 +1,11 @@
 import AppKit
 
 enum MenuIcon {
-    static func color(for b: BatterySnapshot) -> NSColor? {
+    static func color(for b: BatterySnapshot, holdingOnWall: Bool = false) -> NSColor? {
+        // Зелений — заряджається, синій — лише «ліміт тримається від розетки»: це стани, а не рівень заряду, тому не залежать від налаштування кольорів
+        if b.isCharging { return .systemGreen }
+        if holdingOnWall { return .systemBlue }
         guard Settings.shared.smartColors else { return nil }
-        // Зарядку й адаптер уже показує значок ліворуч; колір лишаємо для попереджень
-        if b.isCharging { return nil }
         if b.lowPower { return .systemYellow }
         if b.percent <= 20 { return .systemRed }
         return nil
@@ -12,11 +13,11 @@ enum MenuIcon {
 
     /// Іконка в стилі iPhone: заповнення за рівнем, відсоток усередині.
     /// Заповнення приглушене, щоб число було одного кольору: межа заливки не ріже цифру надвоє.
-    static func image(for b: BatterySnapshot, style: IconStyle, phase: Int = -1) -> NSImage {
+    static func image(for b: BatterySnapshot, style: IconStyle, phase: Int = -1, holdingOnWall: Bool = false) -> NSImage {
         let showNumber = style == .inside
         let bodyW: CGFloat = showNumber ? 27 : 22, bodyH: CGFloat = 12.5
         let size = NSSize(width: bodyW + 3, height: 16)
-        let accent = color(for: b)
+        let accent = color(for: b, holdingOnWall: holdingOnWall)
 
         let img = NSImage(size: size, flipped: false) { _ in
             guard let ctx = NSGraphicsContext.current?.cgContext else { return false }

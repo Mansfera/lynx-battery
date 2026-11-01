@@ -14,6 +14,13 @@ enum PercentMode: String, CaseIterable, Identifiable {
         case .ofDesign: "Remaining ÷ capacity when new. At 90% health a full battery shows 90%."
         }
     }
+    var chargeScale: ChargeScale {
+        switch self {
+        case .macOS: .macOS
+        case .trueCharge: .trueCharge
+        case .ofDesign: .ofDesign
+        }
+    }
     func pick(_ b: BatterySnapshot) -> Int {
         switch self {
         case .macOS: b.macPercent

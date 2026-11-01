@@ -10,9 +10,43 @@ enum ChargePaths {
     static let daemonPlist = "/Library/LaunchDaemons/xyz.etherlynx.battery.helper.plist"
 }
 
+/// У якому відсотку задано ліміт: той самий вибір, що й Settings.percentMode (хелпер Settings не бачить).
+enum ChargeScale: String, Codable {
+    case macOS, trueCharge, ofDesign
+
+    /// Хелпер читає сирий знімок, де b.percent — справжній заряд.
+    func percent(_ b: BatterySnapshot) -> Int {
+        switch self {
+        case .macOS: b.macPercent
+        case .trueCharge: b.percent
+        case .ofDesign: b.designPercent
+        }
+    }
+
+    /// Найбільше значення в цьому відсотку: ліміт на цій позначці означає «заряджати до повного».
+    func top(_ b: BatterySnapshot) -> Int { self == .ofDesign ? b.designTop : 100 }
+
+    /// Те саме фізичне значення заряду в іншому відсотку, щоб при зміні режиму ліміт не зсувався.
+    func convert(_ value: Int, to other: ChargeScale, _ b: BatterySnapshot) -> Int {
+        if self == other { return value }
+        let design = Double(max(1, b.designTop)) / 100
+        let mac = Double(max(1, b.macPercent)) / Double(max(1, b.percent))
+        var trueValue = Double(value)
+        if self == .macOS { trueValue /= mac } else if self == .ofDesign { trueValue /= design }
+        switch other {
+        case .macOS: trueValue *= mac
+        case .ofDesign: trueValue *= design
+        case .trueCharge: break
+        }
+        return Int(trueValue.rounded())
+    }
+}
+
 struct ChargeConfig: Codable, Equatable {
     var enabled = false
-    var limit = 80            // 50…100
+    var limit = 80            // у відсотку scale; 30…100
+    /// Необов'язкове, бо в старому файлі налаштувань його немає; nil — справжній заряд, як раніше.
+    var scale: ChargeScale?
     var sailing = true
     var sailRange = 5         // 2…20: повертаємо заряд лише нижче limit − sailRange
     var heatProtection = true
@@ -28,7 +62,7 @@ struct ChargeConfig: Codable, Equatable {
     /// Хелпер працює від root і читає файл, який може правити користувач, — тож лише перевірені межі.
     func sanitized() -> ChargeConfig {
         var c = self
-        c.limit = min(100, max(50, c.limit))
+        c.limit = min(100, max(30, c.limit))
         c.sailRange = min(20, max(2, c.sailRange))
         c.heatMax = min(45, max(30, c.heatMax))
         return c
@@ -45,7 +79,9 @@ struct ChargeStatus: Codable, Equatable {
     var temperature: Double?
     var adapterPaused = false
     var chargingPaused = false
-    /// Що вміє цей Mac: "charge-inhibit" (CHTE / CH0B+CH0C), "adapter" (CHIE / CH0I), "led" (ACLC).
+    /// Ліміт тримається: адаптер живить Mac, батарея не заряджається й не віддає. Необов'язкове, бо старий хелпер цього поля не пише.
+    var wallHold: Bool?
+    /// Що вміє цей Mac: "charge-inhibit" (CHTE / CH0B+CH0C / межа в прошивці), "adapter" (CHIE / CH0I), "led" (ACLC), "firmware-limit" (bfF0, bfD0, bfE0).
     var capabilities: [String] = []
     var note: String?
 }

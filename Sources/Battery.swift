@@ -22,6 +22,8 @@ struct BatterySnapshot: Equatable {
     var macPercent: Int = 0
     /// Заряд відносно ємності нової батареї: 100 % macOS при здоров'ї 90 % → 90 %.
     var designPercent: Int = 0
+    /// Скільки покаже designPercent на повному заряді — стеля ліміту в цьому режимі.
+    var designTop: Int = 100
 
     /// Підключено, але батарея сідає. Причин багато: щойно підключили, заряд тримає ліміт або сама macOS.
     var drainingOnAC: Bool { onAC && !isCharging && watts < -1.5 }
@@ -82,16 +84,19 @@ enum BatteryReader {
         let cur = num("CurrentCapacity") ?? 0
         let max = num("MaxCapacity") ?? 100
         var percent = max > 0 ? Int((Double(cur) / Double(max) * 100).rounded()) : cur
-        if let rem = (bd["RemainingCapacity"] as? NSNumber)?.doubleValue,
-           let full = (bd["FullChargeCapacity"] as? NSNumber)?.doubleValue, full > 0, rem > 0 {
+        // У BatteryData цих полів може не бути (macOS 15): тоді мА·год беремо з AppleRaw*, інакше всі режими показують те саме
+        let rem = ((bd["RemainingCapacity"] ?? d["AppleRawCurrentCapacity"]) as? NSNumber)?.doubleValue
+        let full = ((bd["FullChargeCapacity"] ?? d["AppleRawMaxCapacity"]) as? NSNumber)?.doubleValue
+        if let rem, let full, full > 0, rem > 0 {
             percent = Int((rem / full * 100).rounded())
         }
         if flag("FullyCharged") { percent = 100 }
         let macPercent = max > 0 ? Int((Double(cur) / Double(max) * 100).rounded()) : cur
         var designPercent = percent
-        if let rem = (bd["RemainingCapacity"] as? NSNumber)?.doubleValue,
-           let design = num("DesignCapacity"), design > 0 {
-            designPercent = Swift.min(100, Int((rem / Double(design) * 100).rounded()))
+        var designTop = 100
+        if let design = num("DesignCapacity"), design > 0 {
+            if let rem { designPercent = Swift.min(100, Int((rem / Double(design) * 100).rounded())) }
+            if let full { designTop = Swift.min(100, Int((full / Double(design) * 100).rounded())) }
         }
         let charging = flag("IsCharging")
         let ac = flag("ExternalConnected")
@@ -131,7 +136,8 @@ enum BatteryReader {
             inputWatts: ac ? input : 0,
             lowPower: ProcessInfo.processInfo.isLowPowerModeEnabled,
             macPercent: macPercent,
-            designPercent: designPercent
+            designPercent: designPercent,
+            designTop: designTop
         )
     }
 

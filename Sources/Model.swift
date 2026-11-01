@@ -29,6 +29,8 @@ final class AppModel: ObservableObject {
     var onChange: (() -> Void)?
     private var timer: Timer?
     private var deviceTimer: Timer?
+    private var percentMode: AnyCancellable?
+    private var chargeStatus: AnyCancellable?
     private let deviceQueue = DispatchQueue(label: "sik.devices", qos: .utility)
 
     func start() {
@@ -39,6 +41,10 @@ final class AppModel: ObservableObject {
         }
         timer = Timer.scheduledTimer(withTimeInterval: 20, repeats: true) { [weak self] _ in self?.refresh() }
         timer?.tolerance = 5
+        // Перемикач відсотка: число й ліміт міняються одразу, а не за наступним оновленням
+        percentMode = Settings.shared.$percentMode.dropFirst().receive(on: DispatchQueue.main).sink { [weak self] _ in self?.refresh() }
+        // Іконка показує стан хелпера, тож малюємо її одразу, щойно він змінився
+        chargeStatus = charge.$status.map { $0?.wallHold }.removeDuplicates().receive(on: DispatchQueue.main).sink { [weak self] _ in self?.onChange?() }
         ble.onChange = { [weak self] in self?.mergeDevices() }
         ble.start()
         refreshDevices()
@@ -93,6 +99,8 @@ final class AppModel: ObservableObject {
             return
         }
         powerTimer?.invalidate(); powerTimer = nil
+        charge.readStatus()
+        charge.adoptScale(Settings.shared.percentMode.chargeScale, b)
         b.percent = Settings.shared.percentMode.pick(b)
         alerts.evaluate(b)
         alerts.evaluateCharger(b)

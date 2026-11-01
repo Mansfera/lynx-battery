@@ -87,16 +87,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, Set
         if !b.isCharging { animTimer?.invalidate(); animTimer = nil }
         wasCharging = b.isCharging
         let animating = animTimer != nil
-        button.image = MenuIcon.withStatus(MenuIcon.image(for: b, style: style, phase: animating ? phase : -1), for: b)
+        let onWall = b.onAC && model.charge.holdingOnWall
+        button.image = MenuIcon.withStatus(MenuIcon.image(for: b, style: style, phase: animating ? phase : -1, holdingOnWall: onWall), for: b)
         if style == .beside {
             button.attributedTitle = NSAttributedString(string: " \(b.percent)%", attributes: [
                 .font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .medium),
-                .foregroundColor: MenuIcon.color(for: b) ?? NSColor.labelColor,
+                .foregroundColor: MenuIcon.color(for: b, holdingOnWall: onWall) ?? NSColor.labelColor,
             ])
         } else {
             button.title = ""
         }
-        button.toolTip = "\(b.percent)% · \(b.statusLine)"
+        button.toolTip = onWall ? "\(b.percent)% · Holding the limit on wall power" : "\(b.percent)% · \(b.statusLine)"
     }
 
     @objc private func toggle() {
