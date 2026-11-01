@@ -4,8 +4,9 @@ import Foundation
 /// Заряд пристроїв через стандартний Bluetooth Battery Service (GATT 0x180F / рівень 0x2A19).
 /// Так iPhone, iPad і багато навушників (Sony, Bose, Logitech…) віддають заряд спареному Mac.
 /// Потрібен дозвіл на Bluetooth — macOS спитає один раз.
-/// Сканування навмання свідомо немає: поруч iPhone анонімні, і ми б підключались до чужих телефонів.
-/// Читаємо лише те, що вже з'єднане з цим Mac.
+/// iPhone та iPad не тримають з'єднання з Mac, тож їх шукаємо коротким скануванням раз на кілька хвилин.
+/// До чужих телефонів не підключаємось: macOS показує назву лише своїх пристроїв, і ми беремо тільки ті,
+/// чия назва точно збігається зі списком спарених у system_profiler.
 final class BLEBattery: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     private let batteryService = CBUUID(string: "180F")
     private let batteryLevel = CBUUID(string: "2A19")
@@ -13,12 +14,23 @@ final class BLEBattery: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate
     private var peripherals: [UUID: CBPeripheral] = [:]
     private var levels: [UUID: (name: String, level: Int, seen: Date)] = [:]
     private var timer: Timer?
+    /// Підключені нами зі сканування: прочитали заряд — відключаємось, щоб не тримати зайве з'єднання.
+    private var scanned: Set<UUID> = []
+    /// Один пристрій — одна спроба за сканування: після відключення він рекламує себе знову.
+    private var tried: Set<UUID> = []
+    /// Показали, що Battery Service немає (Apple Watch, AirPods) — більше не турбуємо.
+    private var noBattery: Set<UUID> = []
+    private var lastScan = Date.distantPast
+    private let scanEvery: TimeInterval = 300
+    private let scanFor: TimeInterval = 8
+    /// Спарені пристрої (назва → тип) із DeviceReader.
+    var paired: [String: String] = [:]
     var onChange: (() -> Void)?
 
     var devices: [BTDevice] {
         levels.values
-            .filter { Date().timeIntervalSince($0.seen) < 600 }
-            .map { BTDevice(name: $0.name, kind: Self.kind(for: $0.name), main: $0.level) }
+            .filter { Date().timeIntervalSince($0.seen) < 900 }
+            .map { BTDevice(name: $0.name, kind: paired[$0.name].flatMap { $0.isEmpty ? nil : $0 } ?? Self.kind(for: $0.name), main: $0.level) }
     }
 
     var state: CBManagerState { central?.state ?? .unknown }
@@ -42,10 +54,45 @@ final class BLEBattery: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate
             if p.state == .connected { p.discoverServices([batteryService]) }
             else { c.connect(p) }
         }
+        scan(c)
+    }
+
+    private func scan(_ c: CBCentralManager) {
+        guard !paired.isEmpty, !c.isScanning, Date().timeIntervalSince(lastScan) >= scanEvery else { return }
+        lastScan = Date()
+        tried = []
+        c.scanForPeripherals(withServices: nil)
+        DispatchQueue.main.asyncAfter(deadline: .now() + scanFor) { c.stopScan() }
+    }
+
+    func centralManager(_ c: CBCentralManager, didDiscover p: CBPeripheral, advertisementData: [String: Any], rssi: NSNumber) {
+        guard let name = p.name, paired[name] != nil, !noBattery.contains(p.identifier),
+              tried.insert(p.identifier).inserted else { return }
+        Self.trace("nearby \(name)")
+        scanned.insert(p.identifier)
+        peripherals[p.identifier] = p
+        p.delegate = self
+        c.connect(p)
+        // Не відповів — забуваємо спробу, інакше телефон поза зоною висів би в черзі з'єднань вічно
+        DispatchQueue.main.asyncAfter(deadline: .now() + 20) { [weak self] in self?.finish(p) }
+    }
+
+    /// Закінчили зі сканованим пристроєм. Те, що тримає сама система, не чіпаємо.
+    private func finish(_ p: CBPeripheral) {
+        guard scanned.remove(p.identifier) != nil else { return }
+        central?.cancelPeripheralConnection(p)
+        peripherals[p.identifier] = nil
+    }
+
+    func centralManager(_ c: CBCentralManager, didDisconnectPeripheral p: CBPeripheral, error: Error?) {
+        Self.trace("disconnected \(p.name ?? "?")")
+        scanned.remove(p.identifier)
+        peripherals[p.identifier] = nil
     }
 
     func centralManager(_ c: CBCentralManager, didFailToConnect p: CBPeripheral, error: Error?) {
         Self.trace("connect failed \(p.name ?? "?"): \(error?.localizedDescription ?? "-")")
+        scanned.remove(p.identifier)
         peripherals[p.identifier] = nil
     }
 
@@ -60,6 +107,11 @@ final class BLEBattery: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate
 
     func peripheral(_ p: CBPeripheral, didDiscoverServices error: Error?) {
         Self.trace("services \(p.name ?? "?"): \(p.services?.map(\.uuid.uuidString) ?? []) \(error?.localizedDescription ?? "")")
+        guard p.services?.contains(where: { $0.uuid == batteryService }) == true else {
+            if error == nil, scanned.contains(p.identifier) { noBattery.insert(p.identifier) }
+            finish(p)
+            return
+        }
         for s in p.services ?? [] where s.uuid == batteryService {
             p.discoverCharacteristics([batteryLevel], for: s)
         }
@@ -68,14 +120,20 @@ final class BLEBattery: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate
     func peripheral(_ p: CBPeripheral, didDiscoverCharacteristicsFor s: CBService, error: Error?) {
         for ch in s.characteristics ?? [] where ch.uuid == batteryLevel {
             p.readValue(for: ch)
-            if ch.properties.contains(.notify) { p.setNotifyValue(true, for: ch) }
+            if ch.properties.contains(.notify), !scanned.contains(p.identifier) { p.setNotifyValue(true, for: ch) }
         }
     }
 
     func peripheral(_ p: CBPeripheral, didUpdateValueFor ch: CBCharacteristic, error: Error?) {
-        guard ch.uuid == batteryLevel, let v = ch.value?.first else { return }
+        guard ch.uuid == batteryLevel else { return }
+        guard error == nil, let v = ch.value?.first else {
+            Self.trace("read failed \(p.name ?? "?"): \(error?.localizedDescription ?? "empty")")
+            finish(p)
+            return
+        }
         levels[p.identifier] = (p.name ?? "Bluetooth device", Int(min(v, 100)), Date())
         Self.trace("\(p.name ?? "?") \(v)%")
+        finish(p)
         onChange?()
     }
 

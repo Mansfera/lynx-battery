@@ -85,19 +85,21 @@ final class AppModel: ObservableObject {
 
     func refreshDevices() {
         deviceQueue.async { [weak self] in
-            let list = DeviceReader.read()
+            let (list, paired) = DeviceReader.read()
             DispatchQueue.main.async {
                 self?.classicDevices = list
+                // Те, що вже звітує заряд (AirPods), через BLE не чіпаємо
+                self?.ble.paired = paired.filter { name, _ in !list.contains { $0.name == name && $0.lowest != nil } }
                 self?.mergeDevices()
                 self?.ble.poll()
             }
         }
     }
 
-    /// Класичний Bluetooth (system_profiler) + BLE Battery Service; дублікати за назвою відкидаємо.
+    /// Класичний Bluetooth (system_profiler) + BLE Battery Service; дублікати за назвою зливаємо.
     private func mergeDevices() {
         var list = classicDevices
-        for d in ble.devices where !list.contains(where: { $0.name == d.name }) { list.append(d) }
+        for d in ble.devices { DeviceReader.absorb(d, into: &list) }
         list.sort { ($0.lowest ?? 101) < ($1.lowest ?? 101) }
         devices = list
         alerts.evaluate(devices: list)

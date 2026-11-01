@@ -32,7 +32,7 @@ Plain `swiftc`, no Xcode project. `build.sh` compiles the app (`Sources/`) and t
 - **Overview** — charge, health (full ÷ design capacity), cycles, battery temperature (SMC `TB0T/TB1T`), Mac draw, 24h/7d/30d history, Low Power Mode.
 - **Charge** — charge limit 50–100 %, Sailing mode, heat protection (35° with a 5-minute hold), top up to 100 % once, stay awake until the limit, MagSafe LED.
 - **Power** — Sankey power flow (adapter → battery / Mac), energy by app (live, 24h, 7d, 30d) grouped by app bundle.
-- **Devices** — AirPods (L/R/case), Magic Mouse/Keyboard/Trackpad, and anything connected that exposes the Bluetooth Battery Service.
+- **Devices** — AirPods (L/R/case, even before they connect), Magic Mouse/Keyboard/Trackpad, paired iPhone and iPad nearby, and anything connected that exposes the Bluetooth Battery Service.
 - **Alerts** — a draggable pill with jelly physics, screen glow, full-screen alert at critical levels.
 - **Percent modes** — as macOS shows, true charge (remaining ÷ full), or of original capacity.
 - Right-click the menu bar icon to toggle Low Power Mode.
@@ -45,7 +45,7 @@ The helper picks a lever per firmware: `CHTE` or `CH0B`+`CH0C` to pause charging
 
 ## Not supported
 
-- iPhone, iPad and Apple Watch through Apple's private battery APIs — they're limited to Apple's own processes. iPhone and iPad appear only when paired and sharing their battery over Bluetooth.
+- Apple Watch — it only reports its battery through the iPhone. iPhone and iPad are read over Bluetooth, so they need to be paired with this Mac and nearby.
 - Widgets (need an Xcode app extension).
 
 ## Fonts

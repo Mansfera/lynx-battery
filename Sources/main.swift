@@ -57,7 +57,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 .font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .medium),
                 .foregroundColor: low ? NSColor.systemRed : NSColor.labelColor,
             ])
-            button.toolTip = model.devices.first.map { "\($0.name): \($0.lowest ?? 0)%" } ?? "No battery · on power"
+            button.toolTip = model.devices.first(where: { $0.lowest != nil }).map { "\($0.name): \($0.lowest!)%" } ?? "No battery · on power"
             return
         }
         let style = Settings.shared.iconStyle

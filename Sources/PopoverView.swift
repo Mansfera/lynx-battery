@@ -952,7 +952,7 @@ struct DevicesTab: View {
                 Stage {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("No devices connected").font(Brand.display(20))
-                        Text("AirPods, Magic Mouse, Keyboard, Trackpad, iPhone and iPad show up here while they're connected over Bluetooth.")
+                        Text("AirPods, Magic Mouse, Keyboard and Trackpad show up here while they're connected. Your iPhone and iPad appear when they're nearby.")
                             .font(Brand.text(11.5)).foregroundStyle(pal.fg.opacity(0.65)).fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -969,7 +969,7 @@ struct DevicesTab: View {
                 }
                 .padding(.horizontal, 4)
             }
-            Text("iPhone, iPad and headphones show up when they share their battery over Bluetooth. Apple Watch only reports through the iPhone, so it isn't shown.")
+            Text("Paired iPhone and iPad update every few minutes while they're nearby. Apple Watch only reports through the iPhone, so it isn't shown.")
                 .font(Brand.text(10.5)).foregroundStyle(pal.muted).frame(maxWidth: .infinity, alignment: .leading).padding(.horizontal, 4)
         }
         .onAppear { model.refreshDevices() }
@@ -1003,9 +1003,11 @@ struct DeviceCard: View {
                 .frame(height: 8)
                 ZStack {
                     Circle().stroke(pal.fg.opacity(0.1), lineWidth: 4)
-                    Circle().trim(from: 0, to: max(0.02, Double(device.lowest ?? 0) / 100))
-                        .stroke(pal.level(device.lowest ?? 100), style: StrokeStyle(lineWidth: 4, lineCap: .round))
-                        .rotationEffect(.degrees(-90))
+                    if let shown = device.lowest ?? device.caseLevel {
+                        Circle().trim(from: 0, to: max(0.02, Double(shown) / 100))
+                            .stroke(pal.level(shown), style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                            .rotationEffect(.degrees(-90))
+                    }
                     Image(systemName: device.symbol).font(.system(size: 22))
                 }
                 .frame(width: 80, height: 80)
@@ -1018,6 +1020,8 @@ struct DeviceCard: View {
                     }
                 } else if let m = device.main {
                     Text("\(m)%").font(Brand.display(18)).foregroundStyle(pal.level(m))
+                } else {
+                    Text("No battery info").font(Brand.text(11)).foregroundStyle(pal.muted)
                 }
                 Spacer(minLength: 0)
                 Text(r.low > 0 ? "Alert at \(r.low)%" : "Alerts off").font(Brand.text(10)).foregroundStyle(pal.muted)
