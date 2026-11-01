@@ -2,10 +2,10 @@ import AppKit
 
 enum MenuIcon {
     static func color(for b: BatterySnapshot, holdingOnWall: Bool = false) -> NSColor? {
-        // Зелений — заряджається, синій — лише «ліміт тримається від розетки»: це стани, а не рівень заряду, тому не залежать від налаштування кольорів
+        guard Settings.shared.smartColors else { return nil }
+        // Зелений — заряджається, синій — лише «ліміт тримається від розетки»
         if b.isCharging { return .systemGreen }
         if holdingOnWall { return .systemBlue }
-        guard Settings.shared.smartColors else { return nil }
         if b.lowPower { return .systemYellow }
         if b.percent <= 20 { return .systemRed }
         return nil

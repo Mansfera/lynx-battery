@@ -141,7 +141,7 @@ struct GeneralSettings: View {
                 }
                 Toggle(isOn: $s.smartColors) {
                     Text("Colour by level")
-                    Text(hasBattery ? "Red when low, yellow in Low Power Mode." : "Red when a device is low.")
+                    Text(hasBattery ? "Green when charging, blue when holding the limit, red when low, yellow in Low Power Mode." : "Red when a device is low.")
                 }
                 if hasBattery { Toggle("Animate while charging", isOn: $s.animateCharging) }
             } header: { SectionHead("Menu bar") }
