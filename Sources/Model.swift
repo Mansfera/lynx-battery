@@ -99,6 +99,7 @@ final class AppModel: ObservableObject {
             return
         }
         powerTimer?.invalidate(); powerTimer = nil
+        SystemPower.dropStaleDrain(&b)
         charge.readStatus()
         charge.adoptScale(Settings.shared.percentMode.chargeScale, b)
         b.percent = Settings.shared.percentMode.pick(b)

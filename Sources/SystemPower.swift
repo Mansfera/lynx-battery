@@ -4,6 +4,14 @@ import IOKit.ps
 /// Mac без батареї (iMac, mini, Studio): чи є батарея за словами macOS і скільки споживає система.
 /// Окремий файл, бо хелпер цього не потребує: його бінарник не змінюється, тож апка не просить пароль на оновлення.
 enum SystemPower {
+    /// Щойно підключили адаптер: macOS ще до хвилини віддає старий струм батареї, і здається, що вона досі живить Mac.
+    /// PDTR і PSTR живі: якщо адаптер покриває споживання, насправді розряду немає.
+    static func dropStaleDrain(_ b: inout BatterySnapshot) {
+        guard b.drainingOnAC, let input = SMC.shared.read("PDTR"), let load = SMC.shared.read("PSTR"),
+              input > 0, input >= load - 0.5 else { return }
+        b.watts = 0
+    }
+
     /// IOPS — те саме джерело, що й у pmset. Служба AppleSmartBattery сама по собі нічого не доводить:
     /// на Mac без батареї вона може існувати. NULL — це помилка, а не «батареї нема», тоді вирішує BatteryReader.
     static func hasInternalBattery() -> Bool {
