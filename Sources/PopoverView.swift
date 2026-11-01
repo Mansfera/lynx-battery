@@ -102,8 +102,10 @@ struct MainPage: View {
                         case .power: PowerTab(model: model, b: b)
                         case .devices: DevicesTab(model: model)
                         }
-                    } else {
+                    } else if model.tab == .devices {
                         DevicesTab(model: model)
+                    } else {
+                        PowerTab(model: model, b: nil)
                     }
                 }
                 .padding(.bottom, 2)
@@ -118,8 +120,8 @@ struct TopBar: View {
     @Environment(\.palette) private var pal
     var body: some View {
         HStack(spacing: 2) {
-            // Без батареї лишаються тільки пристрої
-            ForEach(model.battery == nil ? [AppModel.Tab.devices] : AppModel.Tab.allCases) { t in
+            // Без батареї лишаються потужність і пристрої
+            ForEach(model.battery == nil ? [AppModel.Tab.power, .devices] : AppModel.Tab.allCases) { t in
                 let on = model.tab == t
                 Button { model.tab = t; if t == .power { model.sampleEnergy() } } label: {
                     Text(t.rawValue)
@@ -624,13 +626,13 @@ struct Stepper2: View {
 
 struct PowerTab: View {
     @ObservedObject var model: AppModel
-    let b: BatterySnapshot
+    let b: BatterySnapshot?
     @Environment(\.palette) private var pal
     @State private var energyRange: EnergyRange = .live
 
     var body: some View {
         VStack(spacing: 10) {
-            PowerFlowStage(b: b)
+            if let b { PowerFlowStage(b: b) } else { MacPowerStage(model: model) }
             Panel {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack {
@@ -742,6 +744,50 @@ struct Sparkline: View {
                 i == 0 ? p.move(to: pt) : p.addLine(to: pt)
             }
             ctx.stroke(p, with: .color(color), style: StrokeStyle(lineWidth: 1.4, lineCap: .round, lineJoin: .round))
+        }
+    }
+}
+
+/// Mac без батареї: скільки споживає система зараз і як це мінялося за останні хвилини.
+struct MacPowerStage: View {
+    @ObservedObject var model: AppModel
+    @Environment(\.palette) private var pal
+
+    var body: some View {
+        Stage {
+            if let w = model.macWatts {
+                let h = model.wattHistory
+                VStack(alignment: .leading, spacing: 14) {
+                    HStack(alignment: .firstTextBaseline, spacing: 2) {
+                        Text("\(Int(w.rounded()))")
+                            .font(Brand.display(84))
+                            .tracking(-4)
+                            .monospacedDigit()
+                            .contentTransition(.numericText())
+                        Text("W").font(Brand.display(30)).foregroundStyle(pal.fg.opacity(0.55))
+                        Spacer()
+                        Image(systemName: "powerplug.fill")
+                            .font(.system(size: 18, weight: .semibold)).foregroundStyle(pal.fg.opacity(0.7))
+                    }
+                    .frame(height: 78)
+                    // Спарклайн лише з 5+ замірів, як і в енергії по апках
+                    Sparkline(values: h.count >= 5 ? h : [], color: pal.fg).frame(height: 28)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Mac draw right now").font(Brand.text(13, .medium)).foregroundStyle(pal.fg.opacity(0.7))
+                        if h.count >= 5, let lo = h.min(), let hi = h.max() {
+                            let minutes = Int((Double(h.count) * AppModel.wattInterval / 60).rounded(.up))
+                            Text("\(Int(lo.rounded()))–\(Int(hi.rounded())) W over the last \(minutes) min")
+                                .font(Brand.text(11)).foregroundStyle(pal.fg.opacity(0.5))
+                        }
+                    }
+                }
+            } else {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Power draw isn't available").font(Brand.display(20))
+                    Text("This Mac doesn't report its total power to apps. Energy by app still works.")
+                        .font(Brand.text(11.5)).foregroundStyle(pal.fg.opacity(0.65)).fixedSize(horizontal: false, vertical: true)
+                }
+            }
         }
     }
 }
@@ -1041,6 +1087,7 @@ struct SettingsPage: View {
     @ObservedObject var model: AppModel
     @ObservedObject var s = Settings.shared
     @Environment(\.palette) private var pal
+    private var hasBattery: Bool { model.battery != nil }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -1059,25 +1106,31 @@ struct SettingsPage: View {
 
             FitScroll {
                 VStack(alignment: .leading, spacing: 10) {
-                    Panel {
-                        VStack(alignment: .leading, spacing: 10) {
-                            Label2(text: "Alert when the battery drops to")
-                            ThresholdInput(values: $s.lowAlerts, range: 1...99)
-                            Label2(text: "Alert when it's charged to")
-                            ThresholdInput(values: $s.highAlerts, range: 50...100)
+                    if hasBattery {
+                        Panel {
+                            VStack(alignment: .leading, spacing: 10) {
+                                Label2(text: "Alert when the battery drops to")
+                                ThresholdInput(values: $s.lowAlerts, range: 1...99)
+                                Label2(text: "Alert when it's charged to")
+                                ThresholdInput(values: $s.highAlerts, range: 50...100)
+                            }
                         }
                     }
                     Panel {
                         VStack(alignment: .leading, spacing: 8) {
-                            Row("Charger connected") { Toggle("", isOn: $s.onPlug).labelsHidden() }
-                            Row("Charger disconnected") { Toggle("", isOn: $s.onUnplug).labelsHidden() }
-                            Row("Battery too hot") { Toggle("", isOn: $s.heatAlert).labelsHidden() }
+                            if hasBattery {
+                                Row("Charger connected") { Toggle("", isOn: $s.onPlug).labelsHidden() }
+                                Row("Charger disconnected") { Toggle("", isOn: $s.onUnplug).labelsHidden() }
+                                Row("Battery too hot") { Toggle("", isOn: $s.heatAlert).labelsHidden() }
+                            }
                             Row("Screen glow") { Toggle("", isOn: $s.glow).labelsHidden() }
                             Row("Keep alerts until clicked") { Toggle("", isOn: $s.persistent).labelsHidden() }
-                            Row("Full-screen alert at") { Picker("", selection: $s.fullScreenAt) {
-                                Text("Off").tag(0)
-                                ForEach([1, 2, 3, 5], id: \.self) { Text("\($0)%").tag($0) }
-                            }.labelsHidden().frame(width: 100) }
+                            if hasBattery {
+                                Row("Full-screen alert at") { Picker("", selection: $s.fullScreenAt) {
+                                    Text("Off").tag(0)
+                                    ForEach([1, 2, 3, 5], id: \.self) { Text("\($0)%").tag($0) }
+                                }.labelsHidden().frame(width: 100) }
+                            }
                             Row("Default device alert") { Picker("", selection: $s.deviceLowAt) {
                                 Text("Off").tag(0)
                                 ForEach([5, 10, 15, 20, 30], id: \.self) { Text("\($0)%").tag($0) }
@@ -1090,23 +1143,27 @@ struct SettingsPage: View {
                     }
                     Panel {
                         VStack(alignment: .leading, spacing: 8) {
-                            Row("Battery percentage") { Picker("", selection: $s.percentMode) {
-                                ForEach(PercentMode.allCases) { Text($0.rawValue).tag($0) }
-                            }.labelsHidden().frame(width: 170) }
-                            Text(s.percentMode.detail).font(Brand.text(10.5)).foregroundStyle(pal.muted)
-                                .fixedSize(horizontal: false, vertical: true)
-                            Divider().overlay(pal.line)
-                            Row("Menu bar icon") { Picker("", selection: $s.iconStyle) {
-                                ForEach(IconStyle.allCases) { Text($0.rawValue).tag($0) }
-                            }.labelsHidden().frame(width: 140) }
+                            if hasBattery {
+                                Row("Battery percentage") { Picker("", selection: $s.percentMode) {
+                                    ForEach(PercentMode.allCases) { Text($0.rawValue).tag($0) }
+                                }.labelsHidden().frame(width: 170) }
+                                Text(s.percentMode.detail).font(Brand.text(10.5)).foregroundStyle(pal.muted)
+                                    .fixedSize(horizontal: false, vertical: true)
+                                Divider().overlay(pal.line)
+                                Row("Menu bar icon") { Picker("", selection: $s.iconStyle) {
+                                    ForEach(IconStyle.allCases) { Text($0.rawValue).tag($0) }
+                                }.labelsHidden().frame(width: 140) }
+                            }
                             Row("Colour by level") { Toggle("", isOn: $s.smartColors).labelsHidden() }
-                            Row("Animate while charging") { Toggle("", isOn: $s.animateCharging).labelsHidden() }
+                            if hasBattery {
+                                Row("Animate while charging") { Toggle("", isOn: $s.animateCharging).labelsHidden() }
+                            }
                             Row("Open at login") { Toggle("", isOn: $s.launchAtLogin).labelsHidden() }
                         }
                     }
                     HStack(spacing: 8) {
                         InkPill(title: "Test alert") { model.testAlert() }
-                        InkPill(title: "Test full-screen") { model.testFullScreen() }
+                        if hasBattery { InkPill(title: "Test full-screen") { model.testFullScreen() } }
                         Spacer()
                         Button("Quit") { NSApp.terminate(nil) }
                             .buttonStyle(.plain).font(Brand.text(12, .medium)).foregroundStyle(pal.muted)

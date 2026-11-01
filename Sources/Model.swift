@@ -3,6 +3,10 @@ import Combine
 
 final class AppModel: ObservableObject {
     @Published var battery: BatterySnapshot?
+    /// Mac без батареї: скільки споживає система, Вт; nil — цей Mac такого не повідомляє.
+    @Published var macWatts: Double?
+    @Published var wattHistory: [Double] = []
+    static let wattInterval: TimeInterval = 3
     @Published var devices: [BTDevice] = []
     @Published var range: HistoryRange = .day
     @Published var page: Page = .main
@@ -19,6 +23,7 @@ final class AppModel: ObservableObject {
     let ble = BLEBattery()
     private var classicDevices: [BTDevice] = []
     private var energyTimer: Timer?
+    private var powerTimer: Timer?
 
     let history = HistoryStore()
     let alerts = AlertEngine()
@@ -67,13 +72,18 @@ final class AppModel: ObservableObject {
     }
 
     func refresh() {
-        guard var b = BatteryReader.read() else {
-            // Mac без батареї (iMac, mini, Studio): живемо пристроями
+        guard SystemPower.hasInternalBattery(), var b = BatteryReader.read() else {
+            // Mac без батареї (iMac, mini, Studio): потужність, енергія по апках і пристрої
             if battery != nil { battery = nil }
-            if tab != .devices { tab = .devices }
+            if tab == .overview || tab == .charge { tab = .power }
+            if powerTimer == nil {
+                samplePower()
+                powerTimer = Timer.scheduledTimer(withTimeInterval: Self.wattInterval, repeats: true) { [weak self] _ in self?.samplePower() }
+            }
             onChange?()
             return
         }
+        powerTimer?.invalidate(); powerTimer = nil
         b.percent = Settings.shared.percentMode.pick(b)
         alerts.evaluate(b)
         alerts.evaluateCharger(b)
@@ -81,6 +91,20 @@ final class AppModel: ObservableObject {
         historyTick += 1
         battery = b
         onChange?()
+    }
+
+    private func samplePower() {
+        guard let w = SystemPower.readWatts() else {
+            if macWatts != nil { macWatts = nil; onChange?() }
+            return
+        }
+        // Показник стрибає щосекунди: згладжуємо, щоб число в меню-барі встигали прочитати
+        let smooth = macWatts.map { ($0 + w) / 2 } ?? w
+        let changed = macWatts?.rounded() != smooth.rounded()
+        macWatts = smooth
+        wattHistory.append(smooth)
+        if wattHistory.count > Int(300 / Self.wattInterval) { wattHistory.removeFirst() }
+        if changed { onChange?() }
     }
 
     func refreshDevices() {
@@ -107,6 +131,12 @@ final class AppModel: ObservableObject {
     }
 
     func testAlert() {
+        guard battery != nil else {
+            // Без батареї сповіщення бувають лише про пристрої
+            alerts.presenter.show(AlertSpec(title: "Magic Mouse: 15%", subtitle: "This is how alerts look",
+                                            symbol: "magicmouse", tone: .low))
+            return
+        }
         let p = battery?.percent ?? 15
         alerts.presenter.show(AlertSpec(title: "\(p)% left", subtitle: "This is how alerts look",
                                         symbol: "battery.25percent", tone: .low))

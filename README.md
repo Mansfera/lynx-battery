@@ -37,6 +37,14 @@ Plain `swiftc`, no Xcode project. `build.sh` compiles the app (`Sources/`) and t
 - **Percent modes** — as macOS shows, true charge (remaining ÷ full), or of original capacity.
 - Right-click the menu bar icon to toggle Low Power Mode.
 
+## Macs without a battery
+
+On an iMac, Mac mini, Mac Studio or Mac Pro there is no battery data to show, so Overview and Charge are hidden, along with the battery settings. macOS decides this through `IOPSCopyPowerSourcesInfo` (a UPS doesn't count as a battery). The menu bar shows the Mac's live draw instead, and Power shows it above energy by app. Devices works as usual.
+
+The draw comes from the SMC key `PSTR`, falling back to `PDTR`, with no root needed. If a Mac reports neither, the app says so instead of showing a number. It's the power used by the Mac itself, so it's lower than a meter at the wall would show, because of power supply losses.
+
+To try this on a MacBook, `SIMULATE_NO_BATTERY=1 ./build.sh` builds the app as if it had no battery, and `SIMULATE_NO_BATTERY=no-watts` also hides the power keys. It's a compile flag, so normal builds don't contain it. `Tests/desktop-mode.sh` runs the checks and renders the screens to PNG.
+
 ## Charge limit helper
 
 The limit runs in a small root LaunchDaemon (`xyz.etherlynx.battery.helper`), installed from the Charge tab with an admin prompt. Settings and status live in `/Library/Application Support/Etherlynx Battery/`, the log in `/var/log/etherlynx-battery-helper.log`.

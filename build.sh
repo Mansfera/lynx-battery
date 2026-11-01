@@ -9,8 +9,17 @@ echo "Building $APP ..."
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
+# Перевірка режиму Mac без батареї на MacBook: SIMULATE_NO_BATTERY=1 ./build.sh
+# (=no-watts — ще й без ключа потужності). Прапорець компіляції: у звичайній збірці цього коду немає.
+SIM=()
+case "${SIMULATE_NO_BATTERY:-}" in
+    "") ;;
+    no-watts) SIM=(-D SIMULATE_NO_BATTERY -D SIMULATE_NO_WATTS) ;;
+    *) SIM=(-D SIMULATE_NO_BATTERY) ;;
+esac
+
 # swift-version 5 — без суворої Swift 6 concurrency
-swiftc Sources/*.swift \
+swiftc Sources/*.swift ${SIM[@]+"${SIM[@]}"} \
     -o "$APP/Contents/MacOS/EtherlynxBattery" \
     -framework Cocoa -framework IOKit -framework SwiftUI -framework ServiceManagement -framework CoreBluetooth \
     -swift-version 5 \

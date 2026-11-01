@@ -87,20 +87,34 @@ enum MenuIcon {
         return img
     }
 
-    /// Mac без батареї: значок найслабшого пристрою і його відсоток; без пристроїв — вилка.
-    static func desktop(devices: [BTDevice]) -> (NSImage, String?) {
-        guard let d = devices.first(where: { $0.lowest != nil }), let lvl = d.lowest else {
+    /// Mac без батареї: вилка й потужність. Пристрій, що сідає, стає поруч: іншого місця сказати про нього тут немає.
+    /// Потужності не знаємо — найслабший пристрій або сама вилка, але ніколи не «0 W».
+    static func desktop(devices: [BTDevice], watts: Double?) -> (NSImage, NSAttributedString) {
+        let weakest = devices.first { $0.lowest != nil }
+        let device = weakest.flatMap { d in watts == nil || (d.lowest ?? 100) <= 20 ? d : nil }
+        let lvl = device?.lowest ?? 100
+        let low = lvl <= 20 && Settings.shared.smartColors
+
+        let font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .medium)
+        let title = NSMutableAttributedString()
+        if device != nil {
+            title.append(NSAttributedString(string: " \(lvl)%", attributes: [.font: font, .foregroundColor: low ? NSColor.systemRed : NSColor.labelColor]))
+        }
+        if let watts {
+            title.append(NSAttributedString(string: " \(Int(watts.rounded())) W", attributes: [.font: font, .foregroundColor: NSColor.labelColor]))
+        }
+
+        guard let device else {
             let img = NSImage(systemSymbolName: "powerplug.fill", accessibilityDescription: "On power")!
                 .withSymbolConfiguration(.init(pointSize: 12, weight: .semibold))!
             img.isTemplate = true
-            return (img, nil)
+            return (img, title)
         }
-        let low = lvl <= 20 && Settings.shared.smartColors
         let cfg = NSImage.SymbolConfiguration(pointSize: 12, weight: .semibold)
             .applying(.init(paletteColors: [low ? .systemRed : .labelColor]))
-        let img = NSImage(systemSymbolName: d.symbol, accessibilityDescription: d.name)?.withSymbolConfiguration(cfg)
+        let img = NSImage(systemSymbolName: device.symbol, accessibilityDescription: device.name)?.withSymbolConfiguration(cfg)
             ?? NSImage(systemSymbolName: "dot.radiowaves.left.and.right", accessibilityDescription: nil)!
         img.isTemplate = false
-        return (img, "\(lvl)%")
+        return (img, title)
     }
 }

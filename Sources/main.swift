@@ -50,14 +50,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func updateIcon() {
         guard let button = item.button else { return }
         guard let b = model.battery else {
-            let (img, text) = MenuIcon.desktop(devices: model.devices)
+            let (img, title) = MenuIcon.desktop(devices: model.devices, watts: model.macWatts)
             button.image = img
-            let low = (model.devices.first?.lowest ?? 100) <= 20 && Settings.shared.smartColors
-            button.attributedTitle = NSAttributedString(string: text.map { " \($0)" } ?? "", attributes: [
-                .font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .medium),
-                .foregroundColor: low ? NSColor.systemRed : NSColor.labelColor,
-            ])
-            button.toolTip = model.devices.first(where: { $0.lowest != nil }).map { "\($0.name): \($0.lowest!)%" } ?? "No battery · on power"
+            button.attributedTitle = title
+            let tip = [model.macWatts.map { "Mac draw: \(Int($0.rounded())) W" },
+                       model.devices.first(where: { $0.lowest != nil }).map { "\($0.name): \($0.lowest!)%" }].compactMap { $0 }
+            button.toolTip = tip.isEmpty ? "No battery · on power" : tip.joined(separator: "\n")
             return
         }
         let style = Settings.shared.iconStyle
@@ -90,8 +88,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func toggle() {
         guard let button = item.button else { return }
-        // ПКМ — швидкий перемикач енергозбереження
-        if NSApp.currentEvent?.type == .rightMouseUp {
+        // ПКМ — швидкий перемикач енергозбереження; без батареї просто відкриває поповер
+        if NSApp.currentEvent?.type == .rightMouseUp, model.battery != nil {
             model.toggleLowPower()
             return
         }
