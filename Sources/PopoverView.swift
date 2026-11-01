@@ -774,6 +774,9 @@ struct PowerFlowStage: View {
                 if warn {
                     Text("Plugged in, but the battery is still draining. The charger or cable gives less than the Mac uses — try a stronger adapter or another cable.")
                         .font(Brand.text(11)).foregroundStyle(Brand.signal).fixedSize(horizontal: false, vertical: true)
+                } else if b.drainingOnAC, let a = b.adapterWatts {
+                    Text("Using some battery while plugged in. The Mac draws far less than the \(a) W adapter can give, so the charger isn't the cause.")
+                        .font(Brand.text(11)).foregroundStyle(pal.fg.opacity(0.6)).fixedSize(horizontal: false, vertical: true)
                 } else if let a = b.adapterWatts, b.onAC, b.systemWatts > Double(a) * 0.9 {
                     Text("The Mac is close to the adapter's \(a) W limit.").font(Brand.text(11)).foregroundStyle(pal.fg.opacity(0.6))
                 }

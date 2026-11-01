@@ -23,8 +23,11 @@ struct BatterySnapshot: Equatable {
     /// Заряд відносно ємності нової батареї: 100 % macOS при здоров'ї 90 % → 90 %.
     var designPercent: Int = 0
 
-    /// Підключено, але батарея все одно сідає — зарядка не тягне.
-    var chargerTooWeak: Bool { onAC && !isCharging && watts < -1.5 }
+    /// Підключено, але батарея сідає. Причин багато: щойно підключили, заряд тримає ліміт або сама macOS.
+    var drainingOnAC: Bool { onAC && !isCharging && watts < -1.5 }
+
+    /// Зарядка справді не тягне: Mac споживає майже все, що дає адаптер. Потужність невідома — вважаємо, що так.
+    var chargerTooWeak: Bool { drainingOnAC && adapterWatts.map { systemWatts >= Double($0) * 0.8 } ?? true }
 
     var needsService: Bool { health > 0 && (health < 80 || cycles >= designCycles) }
 
@@ -41,6 +44,7 @@ struct BatterySnapshot: Equatable {
             return s
         }
         if chargerTooWeak { return "Plugged in, still draining" }
+        if drainingOnAC { return "Plugged in, using battery" }
         if onAC { return fullyCharged || percent >= 100 ? "Charged · on power adapter" : "On adapter · not charging" }
         if let m = minutes { return "On battery · \(formatMinutes(m)) left" }
         return "On battery · estimating…"
