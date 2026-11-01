@@ -3,14 +3,15 @@ import AppKit
 enum MenuIcon {
     static func color(for b: BatterySnapshot) -> NSColor? {
         guard Settings.shared.smartColors else { return nil }
-        if b.isCharging { return .systemGreen }
+        // Зарядку й адаптер уже показує значок ліворуч; колір лишаємо для попереджень
+        if b.isCharging { return nil }
         if b.lowPower { return .systemYellow }
         if b.percent <= 20 { return .systemRed }
-        if b.onAC { return .systemBlue }
         return nil
     }
 
-    /// Іконка в стилі iPhone: заповнення за рівнем, відсоток вирізаний усередині.
+    /// Іконка в стилі iPhone: заповнення за рівнем, відсоток усередині.
+    /// Заповнення приглушене, щоб число було одного кольору: межа заливки не ріже цифру надвоє.
     static func image(for b: BatterySnapshot, style: IconStyle, phase: Int = -1) -> NSImage {
         let showNumber = style == .inside
         let bodyW: CGFloat = showNumber ? 27 : 22, bodyH: CGFloat = 12.5
@@ -24,7 +25,7 @@ enum MenuIcon {
             let radius: CGFloat = 4
 
             // Корпус
-            base.withAlphaComponent(0.22).setFill()
+            base.withAlphaComponent(showNumber ? 0.16 : 0.22).setFill()
             NSBezierPath(roundedRect: body, xRadius: radius, yRadius: radius).fill()
             // Пипка
             base.withAlphaComponent(0.4).setFill()
@@ -35,27 +36,22 @@ enum MenuIcon {
             let fillRect = NSRect(x: body.minX, y: body.minY, width: fillW, height: body.height)
             ctx.saveGState()
             NSBezierPath(roundedRect: body, xRadius: radius, yRadius: radius).addClip()
-            (accent ?? base).setFill()
+            let fill = accent ?? base
+            (showNumber ? fill.withAlphaComponent(accent == nil ? 0.42 : 0.55) : fill).setFill()
             fillRect.fill()
             // Зарядка: світла смуга біжить по заповненню
             if phase >= 0 {
                 let x = fillRect.minX + (fillRect.width + 8) * CGFloat(phase) / 9 - 6
-                NSColor.white.withAlphaComponent(0.55).setFill()
+                NSColor.white.withAlphaComponent(showNumber ? 0.3 : 0.55).setFill()
                 NSRect(x: x, y: body.minY, width: 4, height: body.height).intersection(fillRect).fill()
             }
             ctx.restoreGState()
 
-            // Число: кольором тексту на порожній частині, контрастним — на заповненій
             if showNumber {
                 let font = NSFont.systemFont(ofSize: b.percent == 100 ? 9 : 10, weight: .bold)
-                let onFill: NSColor = accent == .systemYellow ? .black : (accent != nil ? .white : .windowBackgroundColor)
-                func draw(_ c: NSColor) {
-                    let str = NSAttributedString(string: "\(b.percent)", attributes: [.font: font, .foregroundColor: c])
-                    let ts = str.size()
-                    str.draw(at: NSPoint(x: body.midX - ts.width / 2, y: body.midY - ts.height / 2 + 0.3))
-                }
-                ctx.saveGState(); ctx.clip(to: NSRect(x: fillRect.maxX, y: 0, width: 100, height: 16)); draw(base); ctx.restoreGState()
-                ctx.saveGState(); ctx.clip(to: fillRect); draw(onFill); ctx.restoreGState()
+                let str = NSAttributedString(string: "\(b.percent)", attributes: [.font: font, .foregroundColor: NSColor.textColor])
+                let ts = str.size()
+                str.draw(at: NSPoint(x: body.midX - ts.width / 2, y: body.midY - ts.height / 2 + 0.3))
             } else if b.isCharging {
                 let bolt = NSImage(systemSymbolName: "bolt.fill", accessibilityDescription: nil)?
                     .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 8, weight: .black)
