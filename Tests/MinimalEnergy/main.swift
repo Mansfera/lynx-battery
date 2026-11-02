@@ -60,6 +60,11 @@ model.charge.setPreview(installed: false, status: nil)
 // CoreBluetooth без дозволу в Info.plist валить процес, тож сам старт уже перевіряє, що Bluetooth не чіпаємо
 model.start()
 check("Bluetooth stays off", model.ble.state == .unknown)
+model.popoverShown = true
+model.tab = .devices
+check("the Devices tab leaves Bluetooth off too", model.ble.state == .unknown)
+model.tab = .overview
+model.popoverShown = false
 pump(0.2)
 check("no top at launch", childCount(named: "top") == 0)
 check("no system_profiler at launch", childCount(named: "system_profiler") == 0)
@@ -90,6 +95,13 @@ render(model, "power-minimal-light")
 render(model, "power-minimal-dark", dark: true)
 model.battery = nil
 render(model, "power-minimal-desktop")
+
+// Без дозволу вихід із режиму теж не чіпає Bluetooth, поки не відкрито Devices: інакше тут процес упаде
+if !model.ble.authorized {
+    Settings.shared.minimalEnergy = false
+    pump(0.5)
+    check("no Bluetooth prompt until the Devices tab opens", model.ble.state == .unknown)
+}
 
 UserDefaults.standard.removePersistentDomain(forName: testDefaults)
 print(failures == 0 ? "\nAll passed" : "\n\(failures) FAILED")

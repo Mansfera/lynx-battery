@@ -12,11 +12,11 @@ final class AppModel: ObservableObject {
     @Published private(set) var historyTick = 0
 
     enum Tab: String, CaseIterable, Identifiable { case overview = "Overview", charge = "Charge", power = "Power", devices = "Devices"; var id: String { rawValue } }
-    @Published var tab: Tab = .overview
+    @Published var tab: Tab = .overview { didSet { startBluetoothOnDevicesTab() } }
     @Published var apps: [AppEnergy] = []
     @Published var expandedApp: String?
     @Published var lowPowerBusy = false
-    @Published var popoverShown = false { didSet { if popoverShown != oldValue { scheduleSampling(); if popoverShown { refresh() } } } }
+    @Published var popoverShown = false { didSet { if popoverShown != oldValue { scheduleSampling(); if popoverShown { refresh() }; startBluetoothOnDevicesTab() } } }
     let energy = EnergyMonitor()
     let charge = ChargeControl()
     let ble = BLEBattery()
@@ -62,7 +62,8 @@ final class AppModel: ObservableObject {
             apps = []
             wattHistory = []
         } else {
-            ble.start()
+            // Дозвіл уже є — читаємо й у фоні. Ще немає — про нього спитає вкладка Devices, а не запуск апки
+            if ble.authorized || devicesOnScreen { ble.start() }
             refreshDevices()
             deviceTimer = Timer.scheduledTimer(withTimeInterval: 90, repeats: true) { [weak self] _ in self?.refreshDevices() }
             deviceTimer?.tolerance = 15
@@ -72,6 +73,12 @@ final class AppModel: ObservableObject {
             energyTimer?.tolerance = 20
         }
         scheduleSampling()
+    }
+
+    private var devicesOnScreen: Bool { popoverShown && tab == .devices }
+
+    private func startBluetoothOnDevicesTab() {
+        if devicesOnScreen, !Settings.shared.minimalEnergy { ble.start() }
     }
 
     /// Мінімальний режим пригальмовує лише фон: відкритий поповер показує свіжі числа, бо на них дивляться.

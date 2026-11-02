@@ -3,7 +3,7 @@ import Foundation
 
 /// Заряд пристроїв через стандартний Bluetooth Battery Service (GATT 0x180F / рівень 0x2A19).
 /// Так iPhone, iPad і багато навушників (Sony, Bose, Logitech…) віддають заряд спареному Mac.
-/// Потрібен дозвіл на Bluetooth — macOS спитає один раз.
+/// Потрібен дозвіл на Bluetooth — macOS спитає один раз, коли вперше створюємо central, тому start() без дозволу кличе лише вкладка Devices.
 /// iPhone та iPad не тримають з'єднання з Mac, тож їх шукаємо коротким скануванням раз на кілька хвилин.
 /// До чужих телефонів не підключаємось: macOS показує назву лише своїх пристроїв, і ми беремо тільки ті,
 /// чия назва точно збігається зі списком спарених у system_profiler.
@@ -35,6 +35,7 @@ final class BLEBattery: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate
     }
 
     var state: CBManagerState { central?.state ?? .unknown }
+    var authorized: Bool { CBManager.authorization == .allowedAlways }
 
     func start() {
         guard central == nil else { return }

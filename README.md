@@ -45,7 +45,7 @@ A power-flow diagram from the adapter to the battery and the Mac, plus energy us
 Minimal energy use cuts the app's own draw. It stops energy sampling, animations, the screen glow and Bluetooth scans, and reads the battery less often while the menu is closed. Devices refresh only when you open the menu, so their alerts can come late. The charge limit and battery alerts keep working. The charge-limit helper checks in less often too, every 40 seconds instead of 15.
 
 ### Devices
-AirPods (left, right and case, even before they connect), Magic Mouse, Keyboard and Trackpad, a paired iPhone or iPad nearby, and anything connected that exposes the Bluetooth Battery Service.
+AirPods (left, right and case, even before they connect), Magic Mouse, Keyboard and Trackpad, a paired iPhone or iPad nearby, and anything connected that exposes the Bluetooth Battery Service. macOS asks for Bluetooth access the first time you open this tab; until you allow it, iPhone, iPad and other devices read over the Battery Service don't show up or send alerts.
 
 ### Alerts
 A draggable pill with jelly physics, a screen-edge glow, and a full-screen alert at critical levels. Low and high thresholds are yours to set.
@@ -80,7 +80,7 @@ The helper picks a lever per firmware: `CHTE` or `CH0B`+`CH0C` to pause charging
 | History and energy data | `~/Library/Application Support/com.mansfera.lynxbattery/` |
 | Helper log | `/var/log/lynx-battery-helper.log` |
 
-Coming from an Etherlynx Battery build, settings and history move over on first launch. The old helper keeps running until you install the new one from the Charge tab, which brings the limit settings across and removes the old helper. Open at login needs turning on again, and macOS asks for Bluetooth access again.
+Coming from an Etherlynx Battery build, settings and history move over on first launch. The old helper keeps running until you install the new one from the Charge tab, which brings the limit settings across and removes the old helper. Open at login needs turning on again, and macOS asks for Bluetooth access again when you open the Devices tab.
 
 ## Not supported
 
