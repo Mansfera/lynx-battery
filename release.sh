@@ -1,6 +1,6 @@
 #!/bin/bash
 # Реліз: ./release.sh 1.0.1
-# Збирає апку, пакує DMG і публікує GitHub Release.
+# Збирає апку, пакує DMG, публікує GitHub Release і оновлює cask у Mansfera/homebrew-tap.
 set -euo pipefail
 V="${1:?usage: ./release.sh <version>, e.g. 1.0.1}"
 cd "$(dirname "$0")"
@@ -20,8 +20,18 @@ SHA=$(shasum -a 256 "$DMG" | cut -d' ' -f1)
 echo "DMG $DMG  sha256 $SHA"
 
 git add Info.plist
-git commit -m "Release $V" >/dev/null || true
+# Без підпису коміт упаде, і релізу зі старою версією в git не буде
+git diff --cached --quiet || git commit -m "Release $V"
 git push
-gh release create "v$V" "$DMG" -R Mansfera/lynx-battery --title "Lynx Battery $V" \
-  --notes "Open the DMG and drag the app to Applications. It's not notarized, so the first launch needs right-click → Open."
-echo "✅ Released $V"
+gh release create "v$V" "$DMG" -R Mansfera/lynx-battery --target "$(git rev-parse HEAD)" --title "Lynx Battery $V" \
+  --notes "Install: \`brew install --cask mansfera/tap/lynx-battery\` or open the DMG and drag the app to Applications."
+
+# Cask у tap: шаблон із цього репозиторію з новою версією й контрольною сумою
+TAP=build/tap
+rm -rf "$TAP"
+gh repo clone Mansfera/homebrew-tap "$TAP" -- -q
+sed -e "s/__VERSION__/$V/" -e "s/__SHA256__/$SHA/" Homebrew/lynx-battery.rb > "$TAP/Casks/lynx-battery.rb"
+git -C "$TAP" add Casks/lynx-battery.rb
+git -C "$TAP" commit -m "lynx-battery $V"
+git -C "$TAP" push -q
+echo "✅ Released $V — brew install --cask mansfera/tap/lynx-battery"
