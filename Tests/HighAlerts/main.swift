@@ -93,5 +93,22 @@ check("status: 88 in true mode isn't charged", snap(88, top: 100).statusLine, "O
 check("status: 100 in true mode", snap(100, top: 100).statusLine, "Charged · on power adapter")
 check("status: full flag in macOS mode", snap(99, top: 100, full: true).statusLine, "Charged · on power adapter")
 
+func charging(_ percent: Int, top: Int, minutes: Int?, watts: Int? = 67) -> BatterySnapshot {
+    BatterySnapshot(percent: percent, isCharging: true, onAC: true, fullyCharged: false, minutes: minutes, watts: 20,
+                    adapterWatts: watts, cycles: 0, designCycles: 1000, designCapacity: 1000, fullCapacity: 880,
+                    temperature: nil, systemWatts: 0, inputWatts: 0, lowPower: false,
+                    designTop: 88, percentTop: top)
+}
+check("status: charging to full", charging(70, top: 100, minutes: 70).statusLine,
+      "Charging · 67 W · full in 1 h 10 min")
+check("status: charging to a limit", charging(68, top: 100, minutes: 40).statusLine(target: 80),
+      "Charging · 67 W · 15 min to 80% · 40 min to full")
+check("status: charging to a limit, no ETA", charging(68, top: 100, minutes: nil).statusLine(target: 80),
+      "Charging · 67 W")
+check("status: charging to design top is full", charging(70, top: 88, minutes: 30).statusLine(target: 88),
+      "Charging · 67 W · full in 30 min")
+check("status: at the limit still charging", charging(80, top: 100, minutes: 20).statusLine(target: 80),
+      "Charging · 67 W · 20 min to full")
+
 print(failures == 0 ? "All passed" : "\(failures) failed")
 exit(failures == 0 ? 0 : 1)

@@ -43,11 +43,28 @@ struct BatterySnapshot: Equatable {
         return min(100, Int((Double(fullCapacity) / Double(designCapacity) * 100).rounded()))
     }
 
-    var statusLine: String {
+    /// target — куди заряджаємось: ліміт або стеля режиму. До повного — лише час; до ліміту — час до нього й до повного.
+    var statusLine: String { statusLine(target: percentTop) }
+
+    func statusLine(target: Int) -> String {
         if isCharging {
+            let dest = min(percentTop, max(0, target))
+            let toFull = dest >= percentTop
+            let left = max(0, dest - percent)
             var s = "Charging"
             if let a = adapterWatts { s += " · \(a) W" }
-            if let m = minutes { s += " · full in \(formatMinutes(m))" }
+            if let m = minutes, m > 0 {
+                if toFull {
+                    s += " · full in \(formatMinutes(m))"
+                } else {
+                    if left > 0 {
+                        let span = max(1, percentTop - percent)
+                        let eta = max(1, Int((Double(m) * Double(left) / Double(span)).rounded()))
+                        s += " · \(formatMinutes(eta)) to \(dest)%"
+                    }
+                    s += " · \(formatMinutes(m)) to full"
+                }
+            }
             return s
         }
         if chargerTooWeak { return "Plugged in, still draining" }

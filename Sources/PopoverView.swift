@@ -138,7 +138,7 @@ struct OverviewTab: View {
 
     var body: some View {
         VStack(spacing: 10) {
-            HeroStage(b: b)
+            HeroStage(b: b, chargeTarget: model.charge.config.chargingTarget(display: Settings.shared.percentMode.chargeScale, b))
             StatsRow(b: b, drain: model.history.drainPerHour(.day))
             if b.needsService { ServicePanel(b: b) }
             DotHistoryPanel(model: model)
@@ -149,6 +149,7 @@ struct OverviewTab: View {
 
 struct HeroStage: View {
     let b: BatterySnapshot
+    var chargeTarget: Int
     @Environment(\.palette) private var pal
     var body: some View {
         Stage {
@@ -169,7 +170,7 @@ struct HeroStage: View {
                 }
                 .frame(height: 78)
                 TickRuler(percent: b.percent, color: pal.state(b), top: Settings.shared.percentMode == .ofDesign ? b.designTop : 100)
-                Text(b.statusLine).font(Brand.text(13, .medium))
+                Text(b.statusLine(target: chargeTarget)).font(Brand.text(13, .medium))
                     .foregroundStyle(b.chargerTooWeak ? Brand.signal : pal.fg.opacity(0.7))
                 if Settings.shared.percentMode != .macOS && b.macPercent != b.percent {
                     Text("\(Settings.shared.percentMode.rawValue) · macOS shows \(b.macPercent)%")

@@ -49,6 +49,14 @@ c.limit = 15
 check("sanitized keeps 15", c.sanitized().limit, 15)
 c.limit = 140
 check("sanitized caps at 100", c.sanitized().limit, 100)
+c.enabled = true; c.limit = 80; c.topUp = false; c.scale = .trueCharge
+check("target: enabled limit", c.chargingTarget(display: .trueCharge, b), 80)
+c.topUp = true
+check("target: top up goes to full", c.chargingTarget(display: .trueCharge, b), 100)
+c.topUp = false; c.enabled = false
+check("target: limit off goes to full", c.chargingTarget(display: .trueCharge, b), 100)
+c.enabled = true; c.limit = 80; c.scale = .trueCharge
+check("target: true limit in original capacity", c.chargingTarget(display: .ofDesign, b), 71)
 
 // Перехід зі старої назви
 let script = ChargeInstall.script(helperPath: "/tmp/helper", uid: 501)

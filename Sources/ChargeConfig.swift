@@ -132,6 +132,13 @@ struct ChargeConfig: Codable, Equatable {
     /// Де Sailing знову вмикає заряд: не нижче межі безпеки хелпера, а в прошивку від'ємне число не піде.
     var sailFloor: Int { max(10, limit - sailRange) }
 
+    /// Куди зараз заряджаємось у відсотку, який бачить користувач. Top Up і вимкнений ліміт — до стелі.
+    func chargingTarget(display: ChargeScale, _ b: BatterySnapshot) -> Int {
+        let top = display.top(b)
+        if !enabled || topUp { return top }
+        return min(top, (scale ?? .trueCharge).convert(limit, to: display, b))
+    }
+
     /// Хелпер працює від root і читає файл, який може правити користувач, — тож лише перевірені межі.
     func sanitized() -> ChargeConfig {
         var c = self

@@ -107,7 +107,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, Set
             button.image = MenuIcon.withStatus(MenuIcon.image(for: b, style: style, phase: animating ? phase : -1, holdingOnWall: onWall), for: b)
             button.attributedTitle = style == .beside ? percentTitle : NSAttributedString()
         }
-        button.toolTip = onWall ? "\(b.percent)% · Holding the limit on wall power" : "\(b.percent)% · \(b.statusLine)"
+        let target = model.charge.config.chargingTarget(display: Settings.shared.percentMode.chargeScale, b)
+        button.toolTip = onWall ? "\(b.percent)% · Holding the limit on wall power" : "\(b.percent)% · \(b.statusLine(target: target))"
     }
 
     @objc private func toggle() {
