@@ -34,6 +34,7 @@ enum IconStyle: String, CaseIterable, Identifiable {
     case inside = "Percent inside"
     case beside = "Percent beside"
     case iconOnly = "Icon only"
+    case percentOnly = "Percent only"
     var id: String { rawValue }
 }
 

@@ -81,7 +81,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, Set
         let style = Settings.shared.iconStyle
         // Смуга біжить по іконці три проходи після підключення, далі — статична блискавка.
         // Постійна анімація коштувала 2–3 % CPU: менюбар-апка не має так їсти батарею, яку стереже.
-        if b.isCharging && !wasCharging && Settings.shared.animateCharging && !Settings.shared.minimalEnergy && animTimer == nil {
+        if b.isCharging && style != .percentOnly && !wasCharging && Settings.shared.animateCharging && !Settings.shared.minimalEnergy && animTimer == nil {
             sweepFrames = 30
             animTimer = Timer.scheduledTimer(withTimeInterval: 0.12, repeats: true) { [weak self] t in
                 guard let self else { return }
@@ -95,14 +95,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, Set
         wasCharging = b.isCharging
         let animating = animTimer != nil
         let onWall = b.onAC && model.charge.holdingOnWall
-        button.image = MenuIcon.withStatus(MenuIcon.image(for: b, style: style, phase: animating ? phase : -1, holdingOnWall: onWall), for: b)
-        if style == .beside {
-            button.attributedTitle = NSAttributedString(string: " \(b.percent)%", attributes: [
-                .font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .medium),
-                .foregroundColor: MenuIcon.color(for: b, holdingOnWall: onWall) ?? NSColor.labelColor,
-            ])
+        let percentTitle = NSAttributedString(string: " \(b.percent)%", attributes: [
+            .font: NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .medium),
+            .foregroundColor: MenuIcon.color(for: b, holdingOnWall: onWall) ?? NSColor.labelColor,
+        ])
+        if style == .percentOnly {
+            animTimer?.invalidate(); animTimer = nil
+            button.image = nil
+            button.attributedTitle = percentTitle
         } else {
-            button.title = ""
+            button.image = MenuIcon.withStatus(MenuIcon.image(for: b, style: style, phase: animating ? phase : -1, holdingOnWall: onWall), for: b)
+            button.attributedTitle = style == .beside ? percentTitle : NSAttributedString()
         }
         button.toolTip = onWall ? "\(b.percent)% · Holding the limit on wall power" : "\(b.percent)% · \(b.statusLine)"
     }
