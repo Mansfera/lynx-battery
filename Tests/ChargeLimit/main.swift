@@ -93,8 +93,13 @@ check("prefs: copied", UserDefaults.standard.persistentDomain(forName: toDomain)
 UserDefaults.standard.setPersistentDomain(["percentMode": "stale"], forName: fromDomain)
 AppData.migratePreferences(from: fromDomain, to: toDomain)
 check("prefs: never overwrites newer settings", UserDefaults.standard.persistentDomain(forName: toDomain)?["percentMode"] as? String, "Of original capacity")
-UserDefaults.standard.removePersistentDomain(forName: fromDomain)
-UserDefaults.standard.removePersistentDomain(forName: toDomain)
+// Порожній файл домену лишається і після removePersistentDomain, тож прибираємо й його
+for domain in [fromDomain, toDomain] {
+    UserDefaults.standard.removePersistentDomain(forName: domain)
+    CFPreferencesAppSynchronize(domain as CFString)
+    let file = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Preferences/\(domain).plist")
+    try? FileManager.default.removeItem(at: file)
+}
 
 print(failures == 0 ? "All passed" : "\(failures) failed")
 exit(failures == 0 ? 0 : 1)
