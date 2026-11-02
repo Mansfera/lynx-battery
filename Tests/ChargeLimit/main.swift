@@ -51,7 +51,7 @@ c.limit = 140
 check("sanitized caps at 100", c.sanitized().limit, 100)
 
 // Перехід зі старої назви
-let script = ChargeControl.installScript(helperPath: "/tmp/helper", uid: 501)
+let script = ChargeInstall.script(helperPath: "/tmp/helper", uid: 501)
 func position(_ text: String) -> Int { script.range(of: text).map { script.distance(from: script.startIndex, to: $0.lowerBound) } ?? -1 }
 check("install stops the old helper", script.contains("launchctl bootout system/\(ChargePaths.legacyLabel)"), true)
 check("install removes the old helper", script.contains("rm -f '\(ChargePaths.legacyDaemonPlist)' '\(ChargePaths.legacyHelperBinary)'"), true)

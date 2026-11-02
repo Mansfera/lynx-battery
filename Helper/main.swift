@@ -12,6 +12,24 @@ import IOKit.pwr_mgt
 // На виході, при вимкненні ліміту й при заряді ≤ 10 % — завжди повертає звичайну зарядку.
 
 setvbuf(stdout, nil, _IOLBF, 0)
+
+// Cask запускає це через sudo наприкінці `brew upgrade`. До будь-яких ключів SMC: це не демон, він лише ставить себе назад.
+if CommandLine.arguments.dropFirst().first == "--restore" {
+    guard getuid() == 0 else { print("--restore needs root"); exit(1) }
+    guard ChargeInstall.shouldRestore(config: FileManager.default.contents(atPath: ChargePaths.config)) else { exit(0) }
+    let attrs = try? FileManager.default.attributesOfItem(atPath: ChargePaths.dir)
+    guard let owner = (attrs?[.ownerAccountID] as? NSNumber)?.uint32Value, owner != 0, CommandLine.arguments[0].hasPrefix("/") else {
+        print("Can't restore the helper: reinstall it from the Charge tab.")
+        exit(1)
+    }
+    let install = Process()
+    install.executableURL = URL(fileURLWithPath: "/bin/sh")
+    install.arguments = ["-c", ChargeInstall.script(helperPath: CommandLine.arguments[0], uid: owner)]
+    try? install.run()
+    install.waitUntilExit()
+    exit(install.terminationStatus)
+}
+
 let smc = SMC.shared
 let fm = FileManager.default
 

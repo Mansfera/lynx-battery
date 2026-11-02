@@ -23,6 +23,52 @@ enum ChargePaths {
     static let legacyLog = "/var/log/etherlynx-battery-helper.log"
 }
 
+/// Установка хелпера: її запускає апка з паролем, а після `brew upgrade` — сам хелпер через cask.
+enum ChargeInstall {
+    static func script(helperPath: String, uid: uid_t) -> String {
+        let plist = """
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0"><dict>
+          <key>Label</key><string>\(ChargePaths.label)</string>
+          <key>ProgramArguments</key><array><string>\(ChargePaths.helperBinary)</string></array>
+          <key>RunAtLoad</key><true/>
+          <key>KeepAlive</key><true/>
+          <key>StandardOutPath</key><string>\(ChargePaths.log)</string>
+          <key>StandardErrorPath</key><string>\(ChargePaths.log)</string>
+        </dict></plist>
+        """
+        return """
+        set -e
+        mkdir -p /Library/PrivilegedHelperTools '\(ChargePaths.dir)'
+        launchctl bootout system/\(ChargePaths.legacyLabel) 2>/dev/null || true
+        rm -f '\(ChargePaths.legacyDaemonPlist)' '\(ChargePaths.legacyHelperBinary)' '\(ChargePaths.legacyLog)'
+        if [ -f '\(ChargePaths.legacyDir)/charge-config.json' ] && [ ! -f '\(ChargePaths.config)' ]; then
+          cp '\(ChargePaths.legacyDir)/charge-config.json' '\(ChargePaths.config)'
+        fi
+        rm -rf '\(ChargePaths.legacyDir)'
+        launchctl bootout system/\(ChargePaths.label) 2>/dev/null || true
+        cp '\(helperPath)' '\(ChargePaths.helperBinary)'
+        chown root:wheel '\(ChargePaths.helperBinary)'
+        chmod 755 '\(ChargePaths.helperBinary)'
+        cat > '\(ChargePaths.daemonPlist)' <<'PLIST'
+        \(plist)
+        PLIST
+        chown root:wheel '\(ChargePaths.daemonPlist)'
+        chmod 644 '\(ChargePaths.daemonPlist)'
+        chown -R \(uid) '\(ChargePaths.dir)'
+        launchctl bootstrap system '\(ChargePaths.daemonPlist)'
+        """
+    }
+
+    /// brew при оновленні прибирає хелпер, а файл налаштувань лишає: повертаємо хелпер, лише якщо ліміт був увімкнений.
+    /// Читаємо одне поле, щоб старий чи новіший файл налаштувань не завадив.
+    static func shouldRestore(config: Data?) -> Bool {
+        guard let config, let json = try? JSONSerialization.jsonObject(with: config) as? [String: Any] else { return false }
+        return json["enabled"] as? Bool == true
+    }
+}
+
 /// У якому відсотку задано ліміт: той самий вибір, що й Settings.percentMode (хелпер Settings не бачить).
 enum ChargeScale: String, Codable {
     case macOS, trueCharge, ofDesign

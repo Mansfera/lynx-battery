@@ -100,7 +100,12 @@ final class ChargeControl: ObservableObject {
 
     private func save() {
         saveWork = nil
-        guard installed, !previewing, let d = try? JSONEncoder().encode(config.sanitized()) else { return }
+        guard installed else { return }
+        write()
+    }
+
+    private func write() {
+        guard !previewing, let d = try? JSONEncoder().encode(config.sanitized()) else { return }
         do { try d.write(to: URL(fileURLWithPath: ChargePaths.config), options: .atomic) }
         catch { self.error = "Couldn't save the charge settings: \(error.localizedDescription)" }
     }
@@ -123,7 +128,7 @@ final class ChargeControl: ObservableObject {
         let staged = FileManager.default.temporaryDirectory.appendingPathComponent("\(ChargePaths.label)-\(UUID().uuidString)")
         do { try FileManager.default.copyItem(at: helper, to: staged) }
         catch { self.error = "Couldn't stage the helper: \(error.localizedDescription)"; return }
-        runAsAdmin(Self.installScript(helperPath: staged.path, uid: getuid())) { [weak self] ok in
+        runAsAdmin(ChargeInstall.script(helperPath: staged.path, uid: getuid())) { [weak self] ok in
             try? FileManager.default.removeItem(at: staged)
             guard let self else { return }
             self.installed = FileManager.default.fileExists(atPath: ChargePaths.daemonPlist)
@@ -137,52 +142,24 @@ final class ChargeControl: ObservableObject {
         }
     }
 
-    static func installScript(helperPath: String, uid: uid_t) -> String {
-        let plist = """
-        <?xml version="1.0" encoding="UTF-8"?>
-        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-        <plist version="1.0"><dict>
-          <key>Label</key><string>\(ChargePaths.label)</string>
-          <key>ProgramArguments</key><array><string>\(ChargePaths.helperBinary)</string></array>
-          <key>RunAtLoad</key><true/>
-          <key>KeepAlive</key><true/>
-          <key>StandardOutPath</key><string>\(ChargePaths.log)</string>
-          <key>StandardErrorPath</key><string>\(ChargePaths.log)</string>
-        </dict></plist>
-        """
-        return """
-        set -e
-        mkdir -p /Library/PrivilegedHelperTools '\(ChargePaths.dir)'
-        launchctl bootout system/\(ChargePaths.legacyLabel) 2>/dev/null || true
-        rm -f '\(ChargePaths.legacyDaemonPlist)' '\(ChargePaths.legacyHelperBinary)' '\(ChargePaths.legacyLog)'
-        if [ -f '\(ChargePaths.legacyDir)/charge-config.json' ] && [ ! -f '\(ChargePaths.config)' ]; then
-          cp '\(ChargePaths.legacyDir)/charge-config.json' '\(ChargePaths.config)'
-        fi
-        rm -rf '\(ChargePaths.legacyDir)'
-        launchctl bootout system/\(ChargePaths.label) 2>/dev/null || true
-        cp '\(helperPath)' '\(ChargePaths.helperBinary)'
-        chown root:wheel '\(ChargePaths.helperBinary)'
-        chmod 755 '\(ChargePaths.helperBinary)'
-        cat > '\(ChargePaths.daemonPlist)' <<'PLIST'
-        \(plist)
-        PLIST
-        chown root:wheel '\(ChargePaths.daemonPlist)'
-        chmod 644 '\(ChargePaths.daemonPlist)'
-        chown -R \(uid) '\(ChargePaths.dir)'
-        launchctl bootstrap system '\(ChargePaths.daemonPlist)'
-        """
-    }
-
     func uninstall() {
         // bootout шле SIGTERM — хелпер сам повертає звичайну зарядку перед виходом
         let script = """
         launchctl bootout system/\(ChargePaths.label) 2>/dev/null || true
         rm -f '\(ChargePaths.daemonPlist)' '\(ChargePaths.helperBinary)' '\(ChargePaths.status)'
         """
-        runAsAdmin(script) { [weak self] _ in
-            self?.installed = FileManager.default.fileExists(atPath: ChargePaths.daemonPlist)
-            self?.checkHelper()
-            self?.status = nil
+        runAsAdmin(script) { [weak self] ok in
+            guard let self else { return }
+            self.installed = FileManager.default.fileExists(atPath: ChargePaths.daemonPlist)
+            self.checkHelper()
+            self.status = nil
+            // Cask повертає хелпер після оновлення, лише якщо ліміт увімкнений: знятий вручну не має повернутись
+            if ok && !self.installed {
+                self.saveWork?.cancel()
+                self.saveWork = nil
+                self.config.enabled = false
+                self.write()
+            }
         }
     }
 
