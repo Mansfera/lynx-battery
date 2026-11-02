@@ -12,7 +12,7 @@ Requires macOS 14 or later on Apple silicon.
 brew install --cask mansfera/tap/lynx-battery
 ```
 
-If Homebrew asks you to trust the tap first, run `brew trust --tap mansfera/tap`. To update, run `brew upgrade --cask lynx-battery`. If the charge limit is on, the upgrade asks for your password to put its helper back, and charging runs as normal for the few seconds that takes.
+If Homebrew asks you to trust the tap first, run `brew trust --tap mansfera/tap`. To update, run `brew upgrade --cask lynx-battery`. If the charge-limit helper is installed, the upgrade asks for your password to replace it, and charging runs as normal for the few seconds that takes. With no helper it doesn't ask.
 
 Or download the DMG from [Releases](https://github.com/Mansfera/lynx-battery/releases) and drag the app to Applications.
 

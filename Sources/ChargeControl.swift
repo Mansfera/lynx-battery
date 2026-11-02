@@ -153,7 +153,7 @@ final class ChargeControl: ObservableObject {
             self.installed = FileManager.default.fileExists(atPath: ChargePaths.daemonPlist)
             self.checkHelper()
             self.status = nil
-            // Cask повертає хелпер після оновлення, лише якщо ліміт увімкнений: знятий вручну не має повернутись
+            // Без хелпера cask повертає його після оновлення, лише якщо ліміт увімкнений: знятий вручну не має повернутись
             if ok && !self.installed {
                 self.saveWork?.cancel()
                 self.saveWork = nil
