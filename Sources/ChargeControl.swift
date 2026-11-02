@@ -13,8 +13,8 @@ final class ChargeControl: ObservableObject {
     private var loadingFromFile = false
     private var previewing = false
     private var timer: Timer?
-    /// Мінімальне споживання: у фоні стан читає лише оновлення моделі, власний таймер зайвий.
-    var minimalEnergy = false
+    /// Мінімальне споживання: у фоні стан читає лише оновлення моделі, власний таймер зайвий. Хелпер дізнається через налаштування.
+    var minimalEnergy = false { didSet { syncMinimalEnergy() } }
 
     init() {
         installed = FileManager.default.fileExists(atPath: ChargePaths.daemonPlist)
@@ -36,7 +36,7 @@ final class ChargeControl: ObservableObject {
     }
 
     /// Хелпер живий, якщо писав стан не пізніше хвилини тому.
-    var helperAlive: Bool { status.map { Date().timeIntervalSince($0.updated) < 60 } ?? false }
+    var helperAlive: Bool { status.map { Date().timeIntervalSince($0.updated) < ChargeStatus.aliveWindow } ?? false }
     var adapterOnly: Bool { status.map { !$0.capabilities.contains("charge-inhibit") && $0.capabilities.contains("adapter") } ?? false }
     /// Ліміт тримається від розетки: лише цей стан малює іконку синім.
     var holdingOnWall: Bool { helperAlive && status?.wallHold == true }
@@ -80,7 +80,15 @@ final class ChargeControl: ObservableObject {
             loadingFromFile = true
             config = c.sanitized()
             loadingFromFile = false
+            // Перемикач живе в налаштуваннях апки: файл міг переписати старіший хелпер, який цього поля не знає
+            syncMinimalEnergy()
         }
+    }
+
+    /// nil замість false: поки режим вимкнено, файл лишається таким, як був.
+    private func syncMinimalEnergy() {
+        let want: Bool? = minimalEnergy ? true : nil
+        if config.minimalEnergy != want { config.minimalEnergy = want }
     }
 
     private func scheduleSave() {

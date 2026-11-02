@@ -121,6 +121,8 @@ var holdUpper: Int?           // на якому значенні прошивк
 var heatSince: Date?
 var sleepAssertion: IOPMAssertionID = 0
 var lastLowPowerRequest: Date?
+var tickTimer: Timer?
+var enforceTimer: Timer?
 
 func loadConfig() -> ChargeConfig {
     guard let d = fm.contents(atPath: ChargePaths.config),
@@ -206,8 +208,26 @@ func enforce() {
 
 // MARK: - Рішення
 
+/// Таймери йдуть за налаштуваннями: перемикач в апці застосовується за наступним tick.
+func scheduleTimers(_ cfg: ChargeConfig) {
+    if tickTimer?.timeInterval != cfg.tickInterval {
+        tickTimer?.invalidate()
+        tickTimer = Timer.scheduledTimer(withTimeInterval: cfg.tickInterval, repeats: true) { _ in tick() }
+        tickTimer?.tolerance = cfg.tickInterval / 8
+    }
+    // Поки щось на паузі — перевіряємо ключі, щоб macOS не встигала дозарядити
+    if enforceTimer?.timeInterval != cfg.enforceInterval {
+        enforceTimer?.invalidate()
+        enforceTimer = Timer.scheduledTimer(withTimeInterval: cfg.enforceInterval, repeats: true) { _ in
+            if !chargingOn || !adapterOn { enforce() }
+        }
+        enforceTimer?.tolerance = cfg.enforceInterval / 8
+    }
+}
+
 func tick() {
     var cfg = loadConfig()
+    scheduleTimers(cfg)
     applyLowPower(cfg)
     guard let b = BatteryReader.read() else { return }
     classifyCHIE(b)
@@ -330,15 +350,15 @@ func tick() {
 log("start · firmware limit=\(firmwareLimit) CHTE=\(hasCHTE) CH0B/C=\(hasCH0B) CHIE=\(hasCHIE) CH0I=\(hasCH0I) LED=\(hasLED)")
 tick()
 BatteryReader.observe { tick() }
-Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { _ in tick() }
-// Запити з апки (Top Up, енергозбереження) — підхоплюємо за 2 с, не чекаючи 15
+// Запити з апки (Top Up, енергозбереження) — підхоплюємо одразу, не чекаючи tick. Без опитування, тож хелпер не будиться дарма.
 var lastConfigStamp: Date?
-Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { _ in
+func checkConfig() {
     let m = (try? fm.attributesOfItem(atPath: ChargePaths.config))?[.modificationDate] as? Date
     if m != lastConfigStamp { lastConfigStamp = m; tick() }
 }
-// Поки щось на паузі — перевіряємо ключі кожні 3 с, щоб macOS не встигала дозарядити
-Timer.scheduledTimer(withTimeInterval: 3, repeats: true) { _ in
-    if !chargingOn || !adapterOn { enforce() }
+let configWatcher = FolderWatcher(path: ChargePaths.dir, onChange: checkConfig)
+if configWatcher == nil {
+    log("can't watch \(ChargePaths.dir), checking the config every 2 s")
+    Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { _ in checkConfig() }
 }
 RunLoop.main.run()

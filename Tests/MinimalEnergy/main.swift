@@ -46,6 +46,10 @@ NSApp.setActivationPolicy(.prohibited)
 Brand.registerFonts(in: fonts)
 try? FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
 
+// CFFIXED_USER_HOME переносить файли даних, але не налаштування: вони живуть у справжньому ~/Library/Preferences під назвою цієї програми
+let testDefaults = ProcessInfo.processInfo.processName
+UserDefaults.standard.removePersistentDomain(forName: testDefaults)
+
 check("off by default", !Settings.shared.minimalEnergy)
 Settings.shared.minimalEnergy = true
 
@@ -65,6 +69,11 @@ check("asking for an energy sample starts nothing", childCount(named: "top") == 
 pump(2.5)
 check("no live app list", model.apps.isEmpty)
 
+check("the helper is told to slow down", model.charge.config.minimalEnergy == true)
+model.charge.minimalEnergy = false
+check("off leaves the helper's config as it was", model.charge.config.minimalEnergy == nil)
+model.charge.minimalEnergy = true
+
 check("closed menu: battery every 5 minutes", model.refreshInterval == 300)
 check("closed menu: wattage every minute", model.powerInterval == 60)
 model.popoverShown = true
@@ -82,5 +91,6 @@ render(model, "power-minimal-dark", dark: true)
 model.battery = nil
 render(model, "power-minimal-desktop")
 
+UserDefaults.standard.removePersistentDomain(forName: testDefaults)
 print(failures == 0 ? "\nAll passed" : "\n\(failures) FAILED")
 exit(failures == 0 ? 0 : 1)

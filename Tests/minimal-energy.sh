@@ -1,12 +1,12 @@
 #!/bin/bash
-# Режим «Minimal energy use»: логіка й PNG вкладки Power. Запуск: Tests/minimal-energy.sh [тека для PNG]. Файли налаштувань, історії й ліміту заряду справжньої апки не чіпає.
+# Режим «Minimal energy use»: логіка й PNG вкладки Power. Запуск: Tests/minimal-energy.sh [тека для PNG]. Налаштувань, історії й ліміту заряду справжньої апки не чіпає; свої тестові налаштування прибирає.
 set -e
 cd "$(dirname "$0")/.."
 OUT="${1:-build/minimal-energy}"
 mkdir -p "$OUT"
 OUT="$(cd "$OUT" && pwd)"
 TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP"' EXIT
+trap 'rm -rf "$TMP"; rm -f "$HOME/Library/Preferences/minimal-energy.plist"' EXIT
 SOURCES=()
 for f in Sources/*.swift; do [ "$f" = Sources/main.swift ] || SOURCES+=("$f"); done
 swiftc "${SOURCES[@]}" Tests/MinimalEnergy/main.swift -o "$TMP/minimal-energy" \

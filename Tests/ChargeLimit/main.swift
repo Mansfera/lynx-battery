@@ -27,6 +27,17 @@ check("lowest on a very worn battery", ChargeScale.ofDesign.lowest(snap(5, healt
 check("original 72 is true 81", ChargeScale.ofDesign.convert(72, to: .trueCharge, b), 81)
 check("true 81 is original 72", ChargeScale.trueCharge.convert(81, to: .ofDesign, b), 72)
 
+check("helper pace: normal tick", ChargeConfig().tickInterval, 15)
+check("helper pace: normal key check", ChargeConfig().enforceInterval, 3)
+var minimalConfig = ChargeConfig(); minimalConfig.minimalEnergy = true
+check("helper pace: minimal tick", minimalConfig.tickInterval, 40)
+check("helper pace: minimal key check", minimalConfig.enforceInterval, 15)
+// Допуск таймера плюс читання раз на 5 с у відкритому поповері: інакше апка вважала б живий хелпер мертвим
+check("helper pace: a slow helper still counts as alive", minimalConfig.tickInterval * 9 / 8 + 5 < ChargeStatus.aliveWindow, true)
+let oldConfigFile = #"{"enabled":true,"limit":80,"sailing":true,"sailRange":5,"heatProtection":true,"heatMax":35,"sleepUntilLimit":false,"magsafeLED":false,"discharge":true,"topUp":false,"lowPower":false}"#
+check("config: an older file still loads", (try? JSONDecoder().decode(ChargeConfig.self, from: Data(oldConfigFile.utf8)))?.minimalEnergy == nil, true)
+check("config: an older file means normal pace", (try? JSONDecoder().decode(ChargeConfig.self, from: Data(oldConfigFile.utf8)))?.tickInterval, 15)
+
 var c = ChargeConfig()
 c.limit = 15; c.sailRange = 20
 check("sail floor never drops below the safety level", c.sailFloor, 10)
