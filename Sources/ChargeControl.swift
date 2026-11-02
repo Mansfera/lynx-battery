@@ -88,7 +88,7 @@ final class ChargeControl: ObservableObject {
 
     private func save() {
         saveWork = nil
-        guard installed, let d = try? JSONEncoder().encode(config.sanitized()) else { return }
+        guard installed, !previewing, let d = try? JSONEncoder().encode(config.sanitized()) else { return }
         do { try d.write(to: URL(fileURLWithPath: ChargePaths.config), options: .atomic) }
         catch { self.error = "Couldn't save the charge settings: \(error.localizedDescription)" }
     }

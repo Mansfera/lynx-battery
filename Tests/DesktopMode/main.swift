@@ -106,6 +106,8 @@ for key in ["PSTR", "PDTR"] {
 print("")
 
 let model = AppModel()
+// Без цього AppModel змінює шкалу ліміту під порожні налаштування тестів, і ChargeControl пише її у файл, який виконує хелпер.
+model.charge.setPreview(installed: false, status: nil)
 
 #if SIMULATE_NO_BATTERY
 model.devices = [lowMouse, BTDevice(name: "AirPods", kind: "Headphones", left: 80, right: 76, caseLevel: 55)]
@@ -142,6 +144,8 @@ check("battery state matches macOS", (model.battery != nil) == has)
 check("wattage stays off while there's a battery", !has || model.macWatts == nil)
 check("Overview stays the first tab", !has || model.tab == .overview)
 #endif
+
+check("the live charge config is out of reach", !model.charge.installed)
 
 print(failures == 0 ? "\nAll passed" : "\n\(failures) FAILED")
 exit(failures == 0 ? 0 : 1)
