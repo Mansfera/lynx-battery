@@ -21,6 +21,9 @@ struct AppEnergy: Identifiable {
 final class EnergyMonitor {
     private struct Hour: Codable { var t: Date; var totals: [String: Double]; var n: Int }
 
+    /// Стеля правдивого POWER із «top». У реальній історії найбільше за годину — 346.5 на замір (усі процеси macOS разом), а збій дав 19 млн на замір. 10 000 лишає запас у ~30 разів для потужніших Mac.
+    static let maxPower = 10_000.0
+
     private(set) var apps: [AppEnergy] = []
     private var recent: [String: [Double]] = [:]
     private var hours: [Hour] = []
@@ -29,10 +32,18 @@ final class EnergyMonitor {
     private let queue = DispatchQueue(label: "sik.energy", qos: .utility)
     private var busy = false
 
-    init() {
-        let dir = AppData.dir
-        url = dir.appendingPathComponent("energy.json")
-        if let d = try? Data(contentsOf: url), let h = try? JSONDecoder().decode([Hour].self, from: d) { hours = h }
+    init(url: URL = AppData.dir.appendingPathComponent("energy.json")) {
+        self.url = url
+        if let d = try? Data(contentsOf: url), let h = try? JSONDecoder().decode([Hour].self, from: d) { hours = Self.healed(h) }
+    }
+
+    /// Збій, що вже у файлі: сума не може бути більшою за стелю на кожен замір. Прибираємо лише цю апку в цю годину, бо решта рядків години чесні. Файл очиститься при наступному save().
+    private static func healed(_ hours: [Hour]) -> [Hour] {
+        hours.map { h in
+            var h = h
+            h.totals = h.totals.filter { $0.value >= 0 && $0.value <= maxPower * Double(max(h.n, 1)) }
+            return h
+        }
     }
 
     func sample(_ done: @escaping () -> Void) {
@@ -49,9 +60,10 @@ final class EnergyMonitor {
         }
     }
 
-    private func ingest(_ procs: [(pid: Int32, cmd: String, power: Double)]) {
+    func ingest(_ procs: [(pid: Int32, cmd: String, power: Double)]) {
         var groups: [String: (impact: Double, path: String?, procs: [(String, Double)])] = [:]
-        for p in procs where p.power > 0 {
+        // Умова відсікає й nan та inf: Double() їх розбирає, а JSON зберегти вже не зможе.
+        for p in procs where p.power > 0 && p.power <= Self.maxPower {
             let (app, path) = Self.owningApp(pid: p.pid, fallback: p.cmd)
             var g = groups[app] ?? (0, path, [])
             g.impact += p.power
