@@ -794,6 +794,9 @@ struct AppRow: View {
             .buttonStyle(.plain)
             if open {
                 VStack(alignment: .leading, spacing: 4) {
+                    if app.name == AppEnergy.macOS {
+                        PowerBreakdownView(model: model).padding(.bottom, 6)
+                    }
                     HStack {
                         Text(String(format: "30-day avg %.0f · recent peak %.0f", app.average, max(app.impact, app.history.max() ?? 0)))
                         Spacer()
@@ -813,6 +816,46 @@ struct AppRow: View {
                 .overlay(alignment: .leading) { Rectangle().fill(pal.line).frame(width: 1) }
                 .padding(.leading, 9)
             }
+        }
+    }
+}
+
+/// Ватти всього Mac, а не лише процесів macOS: чип рахує енергію по блоках, а не по апках.
+struct PowerBreakdownView: View {
+    @ObservedObject var model: AppModel
+    @Environment(\.palette) private var pal
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            HStack {
+                Text("Whole Mac right now")
+                Spacer()
+                if let b = model.breakdown { Text(String(format: "%.1f W", b.total)) }
+            }
+            .font(Brand.text(10.5)).foregroundStyle(pal.muted)
+            if let b = model.breakdown {
+                ForEach(b.parts) { part in row(part, total: b.total) }
+            } else {
+                Text("Measuring…").font(Brand.text(11)).foregroundStyle(pal.muted)
+            }
+        }
+        .onAppear { model.breakdownOnScreen = true }
+        .onDisappear { model.breakdownOnScreen = false }
+    }
+
+    private func row(_ part: PowerPart, total: Double) -> some View {
+        HStack(spacing: 6) {
+            Text(part.name).font(Brand.text(11, .medium)).lineLimit(1).layoutPriority(1)
+            if let d = part.detail { Text(d).font(Brand.text(10)).foregroundStyle(pal.muted).lineLimit(1) }
+            Spacer(minLength: 4)
+            GeometryReader { g in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(pal.fg.opacity(0.08))
+                    Capsule().fill(pal.fg).frame(width: g.size.width * min(1, (part.watts ?? 0) / max(total, 0.01)))
+                }
+            }
+            .frame(width: 56, height: 4)
+            Text(part.watts.map { String(format: part.estimated ? "~%.1f W" : "%.1f W", $0) } ?? "–").font(Brand.mono(10, .regular)).frame(width: 40, alignment: .trailing)
         }
     }
 }

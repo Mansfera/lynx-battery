@@ -2,6 +2,7 @@ import AppKit
 import Darwin
 
 struct AppEnergy: Identifiable {
+    static let macOS = "macOS"          // системні процеси, згруповані в один рядок
     var id: String { name }
     var name: String
     var bundlePath: String?
@@ -150,7 +151,7 @@ final class EnergyMonitor {
             let name = (appPath as NSString).lastPathComponent.replacingOccurrences(of: ".app", with: "")
             return (name, appPath)
         }
-        if path.hasPrefix("/System/") || path.hasPrefix("/usr/") || path.hasPrefix("/sbin/") { return ("macOS", "/System/Applications/System Settings.app") }
+        if path.hasPrefix("/System/") || path.hasPrefix("/usr/") || path.hasPrefix("/sbin/") { return (AppEnergy.macOS, "/System/Applications/System Settings.app") }
         return ((path as NSString).lastPathComponent, nil)
     }
 }
