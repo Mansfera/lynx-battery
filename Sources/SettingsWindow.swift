@@ -114,13 +114,30 @@ private struct SectionHead: View {
     var body: some View { Text(text).font(Brand.text(13, .semibold)) }
 }
 
+/// Без хелпера перемикач вимкнений і показує «вимкнено», але вибір зберігається на випадок, якщо хелпер повернеться.
+struct RightClickLowPowerToggle: View {
+    @ObservedObject var control: ChargeControl
+    @ObservedObject var s: Settings
+
+    var body: some View {
+        Toggle(isOn: Binding(get: { control.installed && s.rightClickLowPower }, set: { s.rightClickLowPower = $0 })) {
+            Text("Right-click for Low Power Mode")
+            Text(control.installed
+                 ? "Right-clicking the icon switches Low Power Mode instead of opening the menu."
+                 : "Needs the charge-limit helper. Install it from the Charge tab.")
+        }
+        .disabled(!control.installed)
+        .onAppear { control.readStatus() }
+    }
+}
+
 struct GeneralSettings: View {
     @ObservedObject var model: AppModel
     @ObservedObject var s = Settings.shared
 
     var body: some View {
         let hasBattery = model.battery != nil
-        SettingsPane(height: hasBattery ? 560 : 402) {
+        SettingsPane(height: hasBattery ? 612 : 402) {
             Section {
                 Toggle("Open at login", isOn: $s.launchAtLogin)
                 if hasBattery {
@@ -149,6 +166,7 @@ struct GeneralSettings: View {
                         if s.minimalEnergy { Text("Off while Minimal energy use is on.") }
                     }
                     .disabled(s.minimalEnergy)
+                    RightClickLowPowerToggle(control: model.charge, s: s)
                 }
             } header: { SectionHead("Menu bar") }
             Section {

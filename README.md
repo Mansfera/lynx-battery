@@ -28,7 +28,7 @@ open "Lynx Battery.app"
 ## Features
 
 ### Overview
-Charge, health (full ÷ design capacity), cycles, battery temperature, how much power the Mac is drawing, 24-hour, 7-day and 30-day history, and Low Power Mode. Right-click the menu bar icon to toggle Low Power Mode.
+Charge, health (full ÷ design capacity), cycles, battery temperature, how much power the Mac is drawing, 24-hour, 7-day and 30-day history, and Low Power Mode. With the charge-limit helper installed, Settings can make right-clicking the menu bar icon toggle Low Power Mode. Otherwise right-click opens the popover.
 
 ### Charge
 - A charge limit from 15% to full.
@@ -97,6 +97,7 @@ Tests/charge-limit.sh   # limit bounds and scale conversion
 Tests/charge-start.sh   # charging starts after a limit change, live charge state
 Tests/energy-history.sh # impossible readings stay out of energy by app
 Tests/helper-restore.sh # the cask puts the helper back after an upgrade
+Tests/right-click.sh    # right-click only toggles Low Power Mode without a password prompt
 Tests/desktop-mode.sh   # Macs without a battery, renders each screen to PNG
 Tests/power-breakdown.sh # the macOS row's power breakdown, renders it to PNG
 ```

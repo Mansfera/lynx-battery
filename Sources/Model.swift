@@ -131,6 +131,13 @@ final class AppModel: ObservableObject {
         energy.sample { [weak self] in self?.apps = self?.energy.apps ?? [] }
     }
 
+    /// ПКМ перемикає енергозбереження, лише коли це не спитає пароль; інакше відкриває поповер, як і ЛКМ.
+    func rightClickTogglesLowPower() -> Bool {
+        guard battery != nil, Settings.shared.rightClickLowPower else { return false }
+        charge.readStatus()
+        return charge.installed && charge.helperAlive
+    }
+
     /// Енергозбереження: через хелпер (без пароля), інакше — pmset з паролем адміністратора.
     func toggleLowPower() {
         guard let b = battery, !lowPowerBusy else { return }
