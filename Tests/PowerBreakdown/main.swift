@@ -37,7 +37,7 @@ check("unmeasured model: everything else admits it holds the backlight", part(br
 let estimated = PowerBreakdown.make(channels: m3, total: 8, display: curve)
 check("measured model: backlight estimate plus the display engine", near(part(estimated, "Display")?.watts, 2.6))
 check("measured model: marked as an estimate", part(estimated, "Display")?.estimated == true)
-check("measured model: backlight leaves everything else", near(part(estimated, "Everything else")?.watts, 8 - 2.6 - 1.4 - 0.4 - 1.9 - 0.06) && part(estimated, "Everything else")?.detail == "Wi-Fi, SSD, audio")
+check("measured model: backlight leaves everything else", near(part(estimated, "Everything else")?.watts, 8 - 2.6 - 1.4 - 0.4 - 1.9 - 0.06 - 0.31) && part(estimated, "Everything else")?.detail == "No sensors")
 check("measured sensors aren't marked as estimates", part(estimated, "CPU")?.estimated == false)
 
 func curveWatts(_ b: Double) -> Double { DisplayState.estimateBacklight(brightness: b, model: "Mac15,12") ?? -1 }
@@ -46,21 +46,22 @@ check("curve matches the sweep: 10% to 50%", abs(curveWatts(0.5) - curveWatts(0.
 check("curve matches the sweep: 10% to 100%", abs(curveWatts(1) - curveWatts(0.1) - 4.63) < 0.1)
 check("curve stays in range", curveWatts(2) == curveWatts(1) && curveWatts(-1) == 0)
 check("no curve for other models", DisplayState.estimateBacklight(brightness: 0.5, model: "Mac14,2") == nil)
-check("idle Neural Engine stays hidden", part(bright, "Neural Engine") == nil)
-check("everything else is what's left of the total", near(part(bright, "Everything else")?.watts, 8 - 1.4 - 0.4 - 1.9 - 0.06))
+check("idle Neural Engine still shows", near(part(bright, "Neural Engine")?.watts, 0))
+check("the chip's leftovers get their own row", near(part(bright, "Rest of chip")?.watts, 0.31))
+check("everything else is what's left of the total", near(part(bright, "Everything else")?.watts, 8 - 1.4 - 0.4 - 1.9 - 0.06 - 0.31))
 check("parts add up to the total", near(bright.parts.reduce(0) { $0 + ($1.watts ?? 0) }, 8))
 
 let shut = PowerBreakdown.make(channels: m3, total: 5, display: lidShut)
 check("lid shut: only the display engine", near(part(shut, "Display")?.watts, 0.1))
 check("lid shut: says the monitor powers itself", part(shut, "Display")?.detail == "External, own power")
-check("lid shut: everything else has no backlight in it", part(shut, "Everything else")?.detail == "Wi-Fi, SSD, audio")
+check("lid shut: everything else has no backlight in it", part(shut, "Everything else")?.detail == "No sensors")
 
 let noTotal = PowerBreakdown.make(channels: m3, total: nil, display: lidShut)
-check("no total: nothing to call everything else", part(noTotal, "Everything else") == nil)
-check("no total: sums what it knows", near(noTotal.total, 3.86))
+check("no total: everything else has no number", part(noTotal, "Everything else") != nil && part(noTotal, "Everything else")?.watts == nil)
+check("no total: sums what it knows", near(noTotal.total, 4.17))
 
 let low = PowerBreakdown.make(channels: m3, total: 1, display: lidShut)
-check("total lagging behind the parts: never below their sum", near(low.total, 3.86) && part(low, "Everything else") == nil)
+check("total lagging behind the parts: never below their sum", near(low.total, 4.17) && near(part(low, "Everything else")?.watts, 0))
 
 let npu = PowerBreakdown.make(channels: ["ANE0": 1.5, "CPU Energy": 1], total: 3, display: lidShut)
 check("working Neural Engine shows", near(part(npu, "Neural Engine")?.watts, 1.5))
@@ -70,6 +71,18 @@ let b = PowerBreakdown(total: 8, parts: [PowerPart(name: "CPU", watts: 4), Power
 let smooth = b.smoothed(after: a)
 check("smooths towards the last reading", near(smooth.total, 6) && near(part(smooth, "CPU")?.watts, 3))
 check("a part that just appeared isn't halved", near(part(smooth, "GPU")?.watts, 1))
+
+let sample = [PowerActivity(name: "Wi-Fi", value: "Idle"), PowerActivity(name: "SSD", value: "12.0 MB/s"), PowerActivity(name: "Audio", value: "Idle")]
+let full = PowerBreakdown.make(channels: m3, total: 9.6, display: curve, activity: sample)
+check("Wi-Fi, SSD and audio sit under everything else", part(full, "Everything else")?.inside == sample)
+check("activity adds no watts of its own", near(full.parts.reduce(0) { $0 + ($1.watts ?? 0) }, 9.6))
+let usage = PowerBreakdown(total: 10, parts: [PowerPart(name: "A", watts: 1), PowerPart(name: "B", watts: nil), PowerPart(name: "C", watts: 5), PowerPart(name: "D", watts: 1.04), PowerPart(name: "E", watts: 3), PowerPart(name: "F", watts: 0), PowerPart(name: "G", watts: 0.1)]).sortedByUsage
+check("sort: biggest first, no number last", usage.parts.map(\.name) == ["C", "E", "A", "D", "G", "F", "B"])
+check("sort: parts showing the same number keep their order", usage.parts.firstIndex { $0.name == "A" }! < usage.parts.firstIndex { $0.name == "D" }!)
+check("sort: never shows a smaller number above a bigger one", usage.parts.firstIndex { $0.name == "G" }! < usage.parts.firstIndex { $0.name == "F" }!)
+check("rate: quiet is idle", PowerActivity.rate(500) == "Idle")
+check("rate: kilobytes", PowerActivity.rate(20 * 1024) == "20 KB/s")
+check("rate: megabytes", PowerActivity.rate(3.5 * 1024 * 1024) == "3.5 MB/s")
 
 // Живе читання: без root і на справжньому чипі
 let monitor = PowerBreakdownMonitor()
@@ -82,6 +95,7 @@ while live == nil, Date() < deadline {
 check("reads live counters without root", live != nil)
 if let live {
     print("      " + live.parts.map { "\($0.name) \($0.watts.map { String(format: "%.2f", $0) } ?? "–")" }.joined(separator: ", ") + String(format: " | total %.2f W", live.total))
+    print("      " + (part(live, "Everything else")?.inside ?? []).map { "\($0.name): \($0.value)" }.joined(separator: ", "))
     check("live CPU is a sane number", (part(live, "CPU")?.watts).map { $0 > 0 && $0 < 200 } ?? false)
 }
 
@@ -148,7 +162,11 @@ func render(_ breakdown: PowerBreakdown?, _ name: String, dark: Bool = false) {
 render(bright, "lid-open-light")
 render(bright, "lid-open-dark", dark: true)
 render(shut, "lid-shut-dark", dark: true)
-render(estimated, "measured-model-dark", dark: true)
+render(full, "full-fixed-dark", dark: true)
+render(full, "full-fixed-light")
+UserDefaults.standard.set(true, forKey: "powerBreakdownByUsage")
+render(full, "full-by-usage-dark", dark: true)
+UserDefaults.standard.removeObject(forKey: "powerBreakdownByUsage")
 render(nil, "measuring-dark", dark: true)
 if let live { render(live, "live-dark", dark: true) }
 

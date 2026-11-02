@@ -827,18 +827,33 @@ struct AppRow: View {
 /// Ватти всього Mac, а не лише процесів macOS: чип рахує енергію по блоках, а не по апках.
 struct PowerBreakdownView: View {
     @ObservedObject var model: AppModel
+    @AppStorage("powerBreakdownByUsage") private var byUsage = false
     @Environment(\.palette) private var pal
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack {
-                Text("Whole Mac right now")
+                Text("Whole Mac right now" + (model.breakdown.map { String(format: " · %.1f W", $0.total) } ?? ""))
                 Spacer()
-                if let b = model.breakdown { Text(String(format: "%.1f W", b.total)) }
+                Button { withAnimation(.snappy) { byUsage.toggle() } } label: {
+                    Text(byUsage ? "Fixed order" : "Sort by usage").underline()
+                }
+                .buttonStyle(.plain)
+                .onHover { $0 ? NSCursor.pointingHand.push() : NSCursor.pop() }
             }
             .font(Brand.text(10.5)).foregroundStyle(pal.muted)
             if let b = model.breakdown {
-                ForEach(b.parts) { part in row(part, total: b.total) }
+                ForEach((byUsage ? b.sortedByUsage : b).parts) { part in
+                    row(part, total: b.total)
+                    ForEach(part.inside) { item in
+                        HStack {
+                            Text(item.name)
+                            Spacer()
+                            Text(item.value).font(Brand.mono(10, .regular))
+                        }
+                        .font(Brand.text(10)).foregroundStyle(pal.muted).padding(.leading, 10)
+                    }
+                }
             } else {
                 Text("Measuring…").font(Brand.text(11)).foregroundStyle(pal.muted)
             }
