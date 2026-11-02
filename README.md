@@ -34,7 +34,7 @@ Charge, health (full ÷ design capacity), cycles, battery temperature, how much 
 - A charge limit from 15% to full.
 - Sailing mode, so the battery doesn't top up every time it dips under the limit.
 - Heat protection, which pauses charging above a set temperature (35° by default) and holds for 5 minutes.
-- Discharge to the limit when you plug in above it.
+- Discharge to the limit when you plug in above it. A monitor or dock on the same cable would go down with the plug, so with one attached the Mac just stops charging and runs down as you use it.
 - Top up to full once, then return to the limit.
 - Stay awake until the limit, on Macs that need it.
 - The MagSafe light shows green while holding and amber while charging.

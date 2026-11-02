@@ -158,6 +158,26 @@ struct FirmwareHold {
     mutating func reset() { upper = nil }
 }
 
+/// Коли можна вимикати адаптер для розряду: вимкнення зачіпає й те, що під'єднане тим самим кабелем.
+enum AdapterCut {
+    /// Скільки часу без сну чекати після підключення: монітор піднімає зв'язок пізніше, ніж з'являється живлення.
+    static let settle: TimeInterval = 30
+
+    static func wouldDropDevices(_ ports: [PowerPort]) -> Bool { ports.contains(where: \.carriesDevices) }
+
+    /// Кабель висмикнули, поки адаптер вимкнений: зарядка видна як порт лише з CC, бо порт із даними до вимкнення не допустив би.
+    /// Порожній список — Mac без цих портів, про нього нічого не знаємо.
+    static func chargerGone(_ ports: [PowerPort]) -> Bool {
+        !ports.isEmpty && !ports.contains { $0.connected && !$0.carriesData }
+    }
+
+    static func allowed(_ ports: [PowerPort], adapterOn: Bool, onAC: Bool, wallFor: TimeInterval) -> Bool {
+        if wouldDropDevices(ports) { return false }
+        if !adapterOn { return !chargerGone(ports) }   // уже вимкнений: живлення не видно, тож вирішує лише порт
+        return onAC && wallFor >= settle
+    }
+}
+
 struct ChargeStatus: Codable, Equatable {
     /// Стан, старіший за це, означає, що хелпер не працює.
     static let aliveWindow: TimeInterval = 60

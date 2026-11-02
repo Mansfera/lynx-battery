@@ -91,6 +91,16 @@ func formatMinutes(_ m: Int) -> String {
     return mm == 0 ? "\(h) h" : "\(h) h \(mm) min"
 }
 
+/// Один порт живлення: що на ньому підключено, з IOKit. Транспорти — "CC", "USB2", "USB3", "CIO" (Thunderbolt), "DisplayPort".
+struct PowerPort: Equatable {
+    var connected: Bool
+    var transports: Set<String>
+
+    /// Монітор чи док. Лише USB2 не рахуємо: так виглядає й YubiKey, а якому порту належить живлення, IOKit не каже ("Power In" завжди No).
+    var carriesDevices: Bool { !transports.isDisjoint(with: ["DisplayPort", "CIO", "USB3"]) }
+    var carriesData: Bool { !transports.subtracting(["CC"]).isEmpty }
+}
+
 enum BatteryReader {
     static func read() -> BatterySnapshot? {
         let service = IOServiceGetMatchingService(kIOMainPortDefault, IOServiceMatching("AppleSmartBattery"))
@@ -184,6 +194,23 @@ enum BatteryReader {
     /// Живий струм важливіший за останнє прочитане: є струм — заряджається; немає — зарядний струм із ioreg уже застарів, а розряд лишаємо.
     static func liveCharge(current: Int, amperage: Double) -> (charging: Bool, mA: Double) {
         current > 0 ? (true, Double(current)) : (false, min(0, amperage))
+    }
+
+    /// Що зараз на портах. Властивості читаються без root; порожньо там, де таких портів немає.
+    static func powerPorts() -> [PowerPort] {
+        var ports: [PowerPort] = []
+        for cls in ["AppleHPMInterfaceType10", "AppleHPMInterfaceType11"] {
+            var it: io_iterator_t = 0
+            guard IOServiceGetMatchingServices(kIOMainPortDefault, IOServiceMatching(cls), &it) == KERN_SUCCESS else { continue }
+            defer { IOObjectRelease(it) }
+            while case let port = IOIteratorNext(it), port != 0 {
+                defer { IOObjectRelease(port) }
+                func prop(_ k: String) -> Any? { IORegistryEntryCreateCFProperty(port, k as CFString, kCFAllocatorDefault, 0)?.takeRetainedValue() }
+                ports.append(PowerPort(connected: prop("ConnectionActive") as? Bool ?? false,
+                                       transports: Set(prop("TransportsActive") as? [String] ?? [])))
+            }
+        }
+        return ports
     }
 
     /// Миттєві оновлення при підключенні/відключенні зарядки.

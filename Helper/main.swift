@@ -136,6 +136,8 @@ var ledValue: UInt8 = 0
 var holding = false           // досягли ліміту й чекаємо, поки спуститься до limit − sailRange
 var draining = false          // розряджаємо до межі; вмикається з запасом, щоб округлення 72↔73 не смикало адаптер
 var hold = FirmwareHold()
+var wallSince: TimeInterval?   // відколи Mac живиться від розетки, а монітора не видно: його зв'язок піднімається не одразу, зокрема й після сну
+var cutBlockedLogged = false
 var heatSince: Date?
 var sleepAssertion: IOPMAssertionID = 0
 var lastLowPowerRequest: Date?
@@ -249,6 +251,7 @@ func tick() {
     applyLowPower(cfg)
     guard let b = BatteryReader.read() else { return }
     classifyCHIE(b)
+    if b.onAC && adapterOn { wallSince = wallSince ?? ProcessInfo.processInfo.systemUptime } else { wallSince = nil }
 
     // Ліміт тримаємо в тому відсотку, який бачить користувач; безпека (≤ 10 %) і Top Up — за справжнім зарядом
     let scale = cfg.scale ?? .trueCharge
@@ -298,7 +301,17 @@ func tick() {
         }
         if toFull || shown <= cfg.limit { draining = false } else if shown > cfg.limit + 1 { draining = true }
         let overLimit = firmwareLimit ? draining : !toFull && shown > cfg.limit + 1
-        let willDrain = overLimit && cfg.discharge && canCutAdapter
+        // Вимкнення адаптера вимикає й монітор чи док на тому ж кабелі: тоді лише не заряджаємо, а розряджається за роботою
+        let wantsDrain = overLimit && cfg.discharge && canCutAdapter
+        let ports = wantsDrain ? BatteryReader.powerPorts() : []
+        let dropsDevices = wantsDrain && AdapterCut.wouldDropDevices(ports)
+        if dropsDevices { wallSince = nil }
+        let wallFor = wallSince.map { ProcessInfo.processInfo.systemUptime - $0 } ?? 0
+        let willDrain = wantsDrain && AdapterCut.allowed(ports, adapterOn: adapterOn, onAC: b.onAC, wallFor: wallFor)
+        if dropsDevices != cutBlockedLogged {
+            cutBlockedLogged = dropsDevices
+            log(dropsDevices ? "adapter stays on: a monitor or dock shares it" : "adapter can be cut again")
+        }
 
         if firmwareLimit && !toFull {
             // Прошивка рахує у відсотку macOS, тож переводимо за поточним співвідношенням
@@ -323,6 +336,9 @@ func tick() {
                 st.mode = .discharging
             } else {
                 st.mode = firmwareLimit && !b.onAC ? .off : .holding
+                if dropsDevices && b.onAC {
+                    st.note = "Not charging — \(shown)% is above the \(cfg.limit)% limit. A monitor or dock shares this cable, so the plug stays on. Use it down; charging resumes at \(lower)%."
+                }
             }
         } else {
             st.mode = b.onAC ? .charging : .off

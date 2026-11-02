@@ -476,7 +476,7 @@ struct ChargeTab: View {
                         if control.canDischarge {
                             // Розряд до ліміту — лише коли є і заборона заряду, і вимкнення адаптера
                             Divider().overlay(pal.line)
-                            Toggle2("Discharge to the limit", detail: "If the battery is above the limit when you plug in, run on battery down to it.",
+                            Toggle2("Discharge to the limit", detail: "If the battery is above the limit on the charger, run on battery down to it. Skipped while a monitor or dock shares the plug.",
                                     isOn: $control.config.discharge) { EmptyView() }
                         }
                         if !control.limitWorksAsleep {
