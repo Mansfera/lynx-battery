@@ -2,12 +2,20 @@ import Foundation
 
 /// Спільне для апки й root-хелпера: налаштування ліміту (пише апка) і стан (пише хелпер).
 enum ChargePaths {
-    static let dir = "/Library/Application Support/Etherlynx Battery"
+    static let dir = "/Library/Application Support/com.mansfera.lynxbattery"
     static let config = dir + "/charge-config.json"
     static let status = dir + "/charge-status.json"
-    static let label = "xyz.etherlynx.battery.helper"
-    static let helperBinary = "/Library/PrivilegedHelperTools/xyz.etherlynx.battery.helper"
-    static let daemonPlist = "/Library/LaunchDaemons/xyz.etherlynx.battery.helper.plist"
+    static let label = "com.mansfera.lynxbattery.helper"
+    static let helperBinary = "/Library/PrivilegedHelperTools/com.mansfera.lynxbattery.helper"
+    static let daemonPlist = "/Library/LaunchDaemons/com.mansfera.lynxbattery.helper.plist"
+    static let log = "/var/log/lynx-battery-helper.log"
+
+    // Хелпер зі старою назвою: установка нового зупиняє й прибирає його, щоб двоє не сперечались за заряд
+    static let legacyDir = "/Library/Application Support/Etherlynx Battery"
+    static let legacyLabel = "xyz.etherlynx.battery.helper"
+    static let legacyHelperBinary = "/Library/PrivilegedHelperTools/xyz.etherlynx.battery.helper"
+    static let legacyDaemonPlist = "/Library/LaunchDaemons/xyz.etherlynx.battery.helper.plist"
+    static let legacyLog = "/var/log/etherlynx-battery-helper.log"
 }
 
 /// У якому відсотку задано ліміт: той самий вибір, що й Settings.percentMode (хелпер Settings не бачить).

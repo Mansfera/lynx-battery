@@ -30,8 +30,7 @@ final class EnergyMonitor {
     private var busy = false
 
     init() {
-        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Etherlynx Battery", isDirectory: true)
+        let dir = AppData.dir
         url = dir.appendingPathComponent("energy.json")
         if let d = try? Data(contentsOf: url), let h = try? JSONDecoder().decode([Hour].self, from: d) { hours = h }
     }

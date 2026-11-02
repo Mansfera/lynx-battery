@@ -29,7 +29,7 @@ swiftc Sources/*.swift ${SIM[@]+"${SIM[@]}"} \
 # Root-хелпер ліміту заряду: ставиться в систему лише з налаштувань апки, з паролем адміністратора
 mkdir -p "$APP/Contents/Library/LaunchServices"
 swiftc Helper/main.swift Sources/SMC.swift Sources/Battery.swift Sources/ChargeConfig.swift \
-    -o "$APP/Contents/Library/LaunchServices/xyz.etherlynx.battery.helper" \
+    -o "$APP/Contents/Library/LaunchServices/com.mansfera.lynxbattery.helper" \
     -framework IOKit -swift-version 5 -target arm64-apple-macos14.0 -O
 
 cp Info.plist "$APP/Contents/Info.plist"

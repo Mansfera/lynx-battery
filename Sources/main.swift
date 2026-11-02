@@ -40,7 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, Set
         model.start()
 
         // Відкрити поповер ззовні (для перевірки розміру без кліку по меню-бару)
-        DistributedNotificationCenter.default().addObserver(forName: Notification.Name("xyz.etherlynx.battery.open"), object: nil, queue: .main) { [weak self] n in
+        DistributedNotificationCenter.default().addObserver(forName: Notification.Name("com.mansfera.lynxbattery.open"), object: nil, queue: .main) { [weak self] n in
             if let tab = (n.object as? String).flatMap(AppModel.Tab.init(rawValue:)) { self?.model.tab = tab }
             if self?.popover.isShown == false { self?.toggle() }
         }
@@ -119,6 +119,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, Set
     }
 }
 
+AppData.migrate()
 let app = NSApplication.shared
 let delegate = AppDelegate()
 app.delegate = delegate

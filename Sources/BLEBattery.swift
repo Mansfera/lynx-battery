@@ -144,10 +144,9 @@ final class BLEBattery: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate
         onChange?()
     }
 
-    /// Короткий лог у ~/Library/Application Support/Etherlynx Battery/ble.log — щоб бачити, що знайшлось.
+    /// Короткий лог у ~/Library/Application Support/com.mansfera.lynxbattery/ble.log — щоб бачити, що знайшлось.
     static func trace(_ s: String) {
-        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Etherlynx Battery", isDirectory: true)
+        let dir = AppData.dir
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         let url = dir.appendingPathComponent("ble.log")
         let line = "[\(Date())] \(s)\n"

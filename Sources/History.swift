@@ -22,8 +22,7 @@ final class HistoryStore {
     private var lastSaved = Date.distantPast
 
     init() {
-        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Etherlynx Battery", isDirectory: true)
+        let dir = AppData.dir
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         url = dir.appendingPathComponent("history.json")
         if let data = try? Data(contentsOf: url),

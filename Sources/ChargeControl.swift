@@ -116,6 +116,10 @@ final class ChargeControl: ObservableObject {
             guard let self else { return }
             self.installed = FileManager.default.fileExists(atPath: ChargePaths.daemonPlist)
             self.checkHelper()
+            // Спершу підхоплюємо перенесені налаштування, інакше значення з пам'яті затруть їх
+            self.saveWork?.cancel()
+            self.saveWork = nil
+            self.readStatus()
             if ok && self.installed { self.config.enabled = true; self.save() }
             else if ok { self.error = "The helper didn't install — no daemon file was written." }
         }
@@ -130,13 +134,19 @@ final class ChargeControl: ObservableObject {
           <key>ProgramArguments</key><array><string>\(ChargePaths.helperBinary)</string></array>
           <key>RunAtLoad</key><true/>
           <key>KeepAlive</key><true/>
-          <key>StandardOutPath</key><string>/var/log/etherlynx-battery-helper.log</string>
-          <key>StandardErrorPath</key><string>/var/log/etherlynx-battery-helper.log</string>
+          <key>StandardOutPath</key><string>\(ChargePaths.log)</string>
+          <key>StandardErrorPath</key><string>\(ChargePaths.log)</string>
         </dict></plist>
         """
         return """
         set -e
         mkdir -p /Library/PrivilegedHelperTools '\(ChargePaths.dir)'
+        launchctl bootout system/\(ChargePaths.legacyLabel) 2>/dev/null || true
+        rm -f '\(ChargePaths.legacyDaemonPlist)' '\(ChargePaths.legacyHelperBinary)' '\(ChargePaths.legacyLog)'
+        if [ -f '\(ChargePaths.legacyDir)/charge-config.json' ] && [ ! -f '\(ChargePaths.config)' ]; then
+          cp '\(ChargePaths.legacyDir)/charge-config.json' '\(ChargePaths.config)'
+        fi
+        rm -rf '\(ChargePaths.legacyDir)'
         launchctl bootout system/\(ChargePaths.label) 2>/dev/null || true
         cp '\(helperPath)' '\(ChargePaths.helperBinary)'
         chown root:wheel '\(ChargePaths.helperBinary)'
@@ -146,7 +156,7 @@ final class ChargeControl: ObservableObject {
         PLIST
         chown root:wheel '\(ChargePaths.daemonPlist)'
         chmod 644 '\(ChargePaths.daemonPlist)'
-        chown \(uid) '\(ChargePaths.dir)'
+        chown -R \(uid) '\(ChargePaths.dir)'
         launchctl bootstrap system '\(ChargePaths.daemonPlist)'
         """
     }

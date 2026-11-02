@@ -11,7 +11,7 @@
 	<key>CFBundleIconName</key>
 	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
-	<string>xyz.etherlynx.battery</string>
+	<string>com.mansfera.lynxbattery</string>
 	<key>CFBundleName</key>
 	<string>Lynx Battery</string>
 	<key>CFBundlePackageType</key>

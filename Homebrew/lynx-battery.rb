@@ -21,16 +21,16 @@ cask "lynx-battery" do
   end
 
   # The charge-limit helper restores normal charging when launchd stops it.
-  uninstall launchctl: "xyz.etherlynx.battery.helper",
-            quit:      "xyz.etherlynx.battery",
+  uninstall launchctl: "com.mansfera.lynxbattery.helper",
+            quit:      "com.mansfera.lynxbattery",
             delete:    [
-              "/Library/LaunchDaemons/xyz.etherlynx.battery.helper.plist",
-              "/Library/PrivilegedHelperTools/xyz.etherlynx.battery.helper",
+              "/Library/LaunchDaemons/com.mansfera.lynxbattery.helper.plist",
+              "/Library/PrivilegedHelperTools/com.mansfera.lynxbattery.helper",
             ]
 
   zap trash: [
-    "/Library/Application Support/Etherlynx Battery",
-    "~/Library/Application Support/Etherlynx Battery",
-    "~/Library/Preferences/xyz.etherlynx.battery.plist",
+    "/Library/Application Support/com.mansfera.lynxbattery",
+    "~/Library/Application Support/com.mansfera.lynxbattery",
+    "~/Library/Preferences/com.mansfera.lynxbattery.plist",
   ]
 end

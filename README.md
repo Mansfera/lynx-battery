@@ -70,15 +70,15 @@ The limit runs in a small root LaunchDaemon, installed from the Charge tab with 
 
 The helper picks a lever per firmware: `CHTE` or `CH0B`+`CH0C` to pause charging, and `CH0I` to cut the adapter. `CHIE` behaves differently across firmware, so its role is self-tested on first use. macOS can reset these keys, so the helper re-checks them every 3 seconds while something is paused. On exit, when the limit is off, or at 10% or below, it restores normal charging. That's why the lowest limit is 15%.
 
-The app was first called Etherlynx Battery, and its identifiers keep that name so existing settings, history and the installed helper carry over:
-
 | What | Where |
 |---|---|
-| Bundle ID | `xyz.etherlynx.battery` |
-| Helper | `xyz.etherlynx.battery.helper` |
-| Limit settings and status | `/Library/Application Support/Etherlynx Battery/` |
-| History and energy data | `~/Library/Application Support/Etherlynx Battery/` |
-| Helper log | `/var/log/etherlynx-battery-helper.log` |
+| Bundle ID | `com.mansfera.lynxbattery` |
+| Helper | `com.mansfera.lynxbattery.helper` |
+| Limit settings and status | `/Library/Application Support/com.mansfera.lynxbattery/` |
+| History and energy data | `~/Library/Application Support/com.mansfera.lynxbattery/` |
+| Helper log | `/var/log/lynx-battery-helper.log` |
+
+Coming from an Etherlynx Battery build, settings and history move over on first launch. The old helper keeps running until you install the new one from the Charge tab, which brings the limit settings across and removes the old helper. Open at login needs turning on again, and macOS asks for Bluetooth access again.
 
 ## Not supported
 
