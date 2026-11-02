@@ -60,12 +60,16 @@ final class SMC {
     /// Запис ключа. Працює лише від root (для звичайного користувача SMC відповідає «not privileged»).
     @discardableResult
     func write(_ key: String, _ bytes: [UInt8]) -> Bool {
+        #if HELPER_TEST
+        return true   // Tests/helper-pace.sh не чіпає справжніх ключів
+        #else
         guard let i = info(key) else { return false }
         var p = SMCParam(); p.key = fourCC(key); p.data8 = 6; p.keyInfo.dataSize = i.size
         withUnsafeMutableBytes(of: &p.bytes) { buf in
             for (j, b) in bytes.prefix(Int(i.size)).enumerated() { buf[j] = b }
         }
         return call(&p) != nil
+        #endif
     }
 
     /// Значення ключа як Double (підтримує flt і sp78).

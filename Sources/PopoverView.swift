@@ -692,12 +692,13 @@ struct Stepper2: View {
 struct PowerTab: View {
     @ObservedObject var model: AppModel
     let b: BatterySnapshot?
+    @ObservedObject var s = Settings.shared
     @Environment(\.palette) private var pal
     @State private var energyRange: EnergyRange = .live
 
     var body: some View {
         VStack(spacing: 10) {
-            if let b { PowerFlowStage(b: b, animating: model.popoverShown, holdingOnWall: b.onAC && model.charge.holdingOnWall) } else { MacPowerStage(model: model) }
+            if let b { PowerFlowStage(b: b, animating: model.popoverShown && !s.minimalEnergy, holdingOnWall: b.onAC && model.charge.holdingOnWall) } else { MacPowerStage(model: model) }
             Panel {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack {
@@ -706,14 +707,18 @@ struct PowerTab: View {
                         EnergySwitch(range: $energyRange)
                     }
                     if energyRange == .live {
-                        if model.apps.isEmpty {
-                            Text("Sampling…").font(Brand.text(11)).foregroundStyle(pal.muted)
+                        if s.minimalEnergy {
+                            Text("Paused while Minimal energy use is on.").font(Brand.text(11)).foregroundStyle(pal.muted)
+                        } else {
+                            if model.apps.isEmpty {
+                                Text("Sampling…").font(Brand.text(11)).foregroundStyle(pal.muted)
+                            }
+                            ForEach(model.apps.prefix(7)) { a in AppRow(model: model, app: a) }
                         }
-                        ForEach(model.apps.prefix(7)) { a in AppRow(model: model, app: a) }
                     } else {
                         let top = model.energy.top(energyRange.history!, limit: 7)
                         if top.isEmpty {
-                            Text("Builds up as the app runs — sampled every 2 minutes.").font(Brand.text(11)).foregroundStyle(pal.muted)
+                            Text(s.minimalEnergy ? "Paused while Minimal energy use is on." : "Builds up as the app runs — sampled every 2 minutes.").font(Brand.text(11)).foregroundStyle(pal.muted)
                         }
                         ForEach(top, id: \.name) { t in
                             HStack(spacing: 8) {
@@ -733,8 +738,23 @@ struct PowerTab: View {
                     }
                 }
             }
+            MinimalEnergyRow(hasBattery: b != nil)
         }
         .onAppear { model.sampleEnergy() }
+    }
+}
+
+struct MinimalEnergyRow: View {
+    let hasBattery: Bool
+    @ObservedObject var s = Settings.shared
+    @Environment(\.palette) private var pal
+    var body: some View {
+        Toggle2("Minimal energy use",
+                detail: "Turns off energy by app, animations, the screen glow and Bluetooth scans. Devices refresh only when you open this menu, so their alerts can come late."
+                    + (hasBattery ? " The charge limit keeps working." : " The wattage in the menu bar updates once a minute."),
+                isOn: $s.minimalEnergy) { EmptyView() }
+            .padding(.horizontal, 14).padding(.vertical, 10)
+            .background(pal.sunk, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 }
 

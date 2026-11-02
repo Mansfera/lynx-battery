@@ -2,7 +2,12 @@ import Foundation
 
 /// Спільне для апки й root-хелпера: налаштування ліміту (пише апка) і стан (пише хелпер).
 enum ChargePaths {
+    #if HELPER_TEST
+    // Tests/helper-pace.sh: окрема тека замість справжньої. У звичайній збірці цього коду немає, тож root-хелпер шляхів ззовні не бере.
+    static let dir = ProcessInfo.processInfo.environment["HELPER_TEST_DIR"]!
+    #else
     static let dir = "/Library/Application Support/com.mansfera.lynxbattery"
+    #endif
     static let config = dir + "/charge-config.json"
     static let status = dir + "/charge-status.json"
     static let label = "com.mansfera.lynxbattery.helper"
@@ -69,6 +74,14 @@ struct ChargeConfig: Codable, Equatable {
     /// Запит на режим енергозбереження (ПКМ по іконці): хелпер застосовує pmset без пароля.
     var lowPower = false
     var lowPowerRequestAt: Date?
+    /// Перемикач «Minimal energy use»: хелпер будиться рідше. Необов'язкове, бо в старому файлі налаштувань його немає.
+    var minimalEnergy: Bool?
+
+    /// Як часто хелпер перераховує й пише стан. Між перерахунками їх будять сповіщення про живлення й зміна налаштувань.
+    /// Разом із допуском таймера й паузою між читаннями в апці має лишатись менше за ChargeStatus.aliveWindow.
+    var tickInterval: TimeInterval { minimalEnergy == true ? 40 : 15 }
+    /// Як часто перевіряти ключі, поки щось на паузі. За 15 с macOS не встигне дозарядити помітно.
+    var enforceInterval: TimeInterval { minimalEnergy == true ? 15 : 3 }
 
     /// Де Sailing знову вмикає заряд: не нижче межі безпеки хелпера, а в прошивку від'ємне число не піде.
     var sailFloor: Int { max(10, limit - sailRange) }
@@ -100,6 +113,9 @@ struct FirmwareHold {
 }
 
 struct ChargeStatus: Codable, Equatable {
+    /// Стан, старіший за це, означає, що хелпер не працює.
+    static let aliveWindow: TimeInterval = 60
+
     enum Mode: String, Codable {
         case off, charging, holding, discharging, heat, topUp, lowSafety, unsupported
     }
@@ -114,4 +130,20 @@ struct ChargeStatus: Codable, Equatable {
     /// Що вміє цей Mac: "charge-inhibit" (CHTE / CH0B+CH0C / межа в прошивці), "adapter" (CHIE / CH0I), "led" (ACLC), "firmware-limit" (bfF0, bfD0, bfE0).
     var capabilities: [String] = []
     var note: String?
+}
+
+/// Будить, коли в теці з'являється чи замінюється файл, — без опитування. Апка пише налаштування атомарно, тож це зміна самої теки.
+final class FolderWatcher {
+    private let source: DispatchSourceFileSystemObject
+
+    init?(path: String, onChange: @escaping () -> Void) {
+        let fd = open(path, O_EVTONLY)
+        guard fd >= 0 else { return nil }
+        source = DispatchSource.makeFileSystemObjectSource(fileDescriptor: fd, eventMask: .write, queue: .main)
+        source.setEventHandler(handler: onChange)
+        source.setCancelHandler { close(fd) }
+        source.resume()
+    }
+
+    deinit { source.cancel() }
 }
