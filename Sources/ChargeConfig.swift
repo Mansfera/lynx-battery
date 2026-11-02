@@ -63,7 +63,7 @@ struct ChargeConfig: Codable, Equatable {
     var heatProtection = true
     var heatMax = 35.0        // °C, як радить AlDente з посиланням на Apple
     var sleepUntilLimit = false
-    var magsafeLED = false
+    var magsafeLED = true
     var discharge = true      // автоматично розряджати до ліміту, якщо заряд вищий
     var topUp = false         // один раз до повного, потім назад до ліміту
     /// Запит на режим енергозбереження (ПКМ по іконці): хелпер застосовує pmset без пароля.
