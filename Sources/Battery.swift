@@ -20,9 +20,9 @@ struct BatterySnapshot: Equatable {
     var lowPower: Bool
     /// Те, що показує macOS (CurrentCapacity) — для порівняння з нашим числом.
     var macPercent: Int = 0
-    /// Заряд відносно ємності нової батареї: 100 % macOS при здоров'ї 90 % → 90 %.
+    /// Заряд відносно ємності нової батареї: справжній заряд × здоров'я, тож 100 % при здоров'ї 90 % → 90 %.
     var designPercent: Int = 0
-    /// Скільки покаже designPercent на повному заряді — стеля ліміту в цьому режимі.
+    /// Скільки покаже designPercent на повному заряді — те саме число, що health, і стеля ліміту в цьому режимі.
     var designTop: Int = 100
 
     /// Підключено, але батарея сідає. Причин багато: щойно підключили, заряд тримає ліміт або сама macOS.
@@ -92,11 +92,15 @@ enum BatteryReader {
         }
         if flag("FullyCharged") { percent = 100 }
         let macPercent = max > 0 ? Int((Double(cur) / Double(max) * 100).rounded()) : cur
+        // Здоров'я рахуємо від NominalChargeCapacity, а заряд — від меншої робочої ємності (AppleRawMaxCapacity).
+        // Ділити залишок на DesignCapacity не можна: повна батарея не дійшла б до свого ж Health (85 проти 88).
+        let fullCapacity = num("NominalChargeCapacity") ?? num("AppleRawMaxCapacity") ?? 0
         var designPercent = percent
         var designTop = 100
-        if let design = num("DesignCapacity"), design > 0 {
-            if let rem { designPercent = Swift.min(100, Int((rem / Double(design) * 100).rounded())) }
-            if let full { designTop = Swift.min(100, Int((full / Double(design) * 100).rounded())) }
+        if let design = num("DesignCapacity"), design > 0, fullCapacity > 0 {
+            let worn = Swift.min(1, Double(fullCapacity) / Double(design))
+            designPercent = Int((Double(Swift.min(100, percent)) * worn).rounded())
+            designTop = Int((worn * 100).rounded())
         }
         let charging = flag("IsCharging")
         let ac = flag("ExternalConnected")
@@ -130,7 +134,7 @@ enum BatteryReader {
             cycles: num("CycleCount") ?? 0,
             designCycles: num("DesignCycleCount9C") ?? 1000,
             designCapacity: num("DesignCapacity") ?? 0,
-            fullCapacity: num("NominalChargeCapacity") ?? num("AppleRawMaxCapacity") ?? 0,
+            fullCapacity: fullCapacity,
             temperature: SMC.shared.batteryTemperature(),
             systemWatts: load,
             inputWatts: ac ? input : 0,

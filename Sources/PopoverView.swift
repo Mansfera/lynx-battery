@@ -168,7 +168,7 @@ struct HeroStage: View {
                     }
                 }
                 .frame(height: 78)
-                TickRuler(percent: b.percent, color: pal.state(b))
+                TickRuler(percent: b.percent, color: pal.state(b), top: Settings.shared.percentMode == .ofDesign ? b.designTop : 100)
                 Text(b.statusLine).font(Brand.text(13, .medium))
                     .foregroundStyle(b.chargerTooWeak ? Brand.signal : pal.fg.opacity(0.7))
                 if Settings.shared.percentMode != .macOS && b.macPercent != b.percent {
@@ -181,19 +181,28 @@ struct HeroStage: View {
 }
 
 /// Лінійка з рисками: пройдене — лінією, поточний рівень — крапкою.
+/// top < 100 — стеля зношеної батареї: вище неї шкала приглушена, бо туди заряд уже не дійде.
 struct TickRuler: View {
     let percent: Int
     var color: Color
+    var top = 100
     @Environment(\.palette) private var pal
     var body: some View {
         Canvas { ctx, size in
             let n = 41
+            let topX = size.width * CGFloat(top) / 100
+            if top < 100 {
+                ctx.fill(Path(CGRect(x: topX, y: size.height - 8, width: size.width - topX, height: 8)), with: .color(pal.fg.opacity(0.1)))
+            }
             for i in 0..<n {
                 let x = size.width * CGFloat(i) / CGFloat(n - 1)
                 let major = i % 10 == 0
                 let h: CGFloat = major ? 8 : 4
                 ctx.fill(Path(CGRect(x: x - 0.5, y: size.height - h, width: 1, height: h)),
-                         with: .color(pal.fg.opacity(major ? 0.45 : 0.2)))
+                         with: .color(pal.fg.opacity(x > topX ? 0.12 : (major ? 0.45 : 0.2))))
+            }
+            if top < 100 {
+                ctx.fill(Path(CGRect(x: topX - 0.75, y: size.height - 12, width: 1.5, height: 12)), with: .color(pal.fg.opacity(0.75)))
             }
             let mx = size.width * CGFloat(percent) / 100
             ctx.fill(Path(CGRect(x: 0, y: size.height - 1.5, width: mx, height: 1.5)), with: .color(color))
@@ -202,8 +211,21 @@ struct TickRuler: View {
         .frame(height: 16)
         .padding(.horizontal, 4)
         .overlay(alignment: .bottom) {
-            HStack { Text("0"); Spacer(); Text("50"); Spacer(); Text("100") }
-                .font(Brand.mono(8, .regular)).foregroundStyle(pal.fg.opacity(0.5)).offset(y: 12)
+            // Підпис стелі стоїть у тому ж рядку, тож сусідні числа поступаються йому місцем
+            HStack {
+                Text("0"); Spacer()
+                Text("50").opacity(top < 100 && (43...57).contains(top) ? 0 : 1); Spacer()
+                Text("100").opacity(top < 100 && top > 90 ? 0 : 1)
+            }
+            .font(Brand.mono(8, .regular)).foregroundStyle(pal.fg.opacity(0.5)).offset(y: 12)
+        }
+        .overlay {
+            if top < 100 {
+                GeometryReader { g in
+                    Text("max \(top)").font(Brand.mono(8, .medium)).foregroundStyle(pal.fg.opacity(0.85)).fixedSize()
+                        .position(x: min(4 + (g.size.width - 8) * CGFloat(top) / 100, g.size.width - 15), y: g.size.height + 7)
+                }
+            }
         }
         .padding(.bottom, 10)
     }
@@ -454,7 +476,7 @@ struct ChargeTab: View {
                         }
                         if !control.limitWorksAsleep {
                             Divider().overlay(pal.line)
-                            Toggle2("Stay awake until the limit", detail: "A sleeping Mac would charge past the limit to 100%.",
+                            Toggle2("Stay awake until the limit", detail: "A sleeping Mac would charge past the limit to full.",
                                     isOn: $control.config.sleepUntilLimit) { EmptyView() }
                         }
                         if control.status?.capabilities.contains("led") ?? true {
@@ -533,7 +555,7 @@ struct LimitStage: View {
                     .foregroundStyle(control.status?.mode == .heat || control.status?.mode == .unsupported ? Brand.signal : pal.fg.opacity(0.75))
                     .fixedSize(horizontal: false, vertical: true)
                 if control.config.enabled && control.config.limit < Int(limitRange.upperBound) {
-                    InkPill(title: control.config.topUp ? "Topping up — tap to cancel" : "Top up to 100% once",
+                    InkPill(title: control.config.topUp ? "Topping up — tap to cancel" : "Top up to max once",
                             symbol: control.config.topUp ? "xmark" : "bolt.fill") {
                         control.config.topUp.toggle()
                     }
@@ -558,7 +580,7 @@ struct LimitStage: View {
         if let n = s.note { return n }
         let c = control.config
         switch s.mode {
-        case .off: return c.enabled ? "On battery — the limit applies when you plug in" : "Limit off — charging normally to 100%"
+        case .off: return c.enabled ? "On battery — the limit applies when you plug in" : "Limit off — charging normally to full"
         case .charging: return c.limit >= Int(limitRange.upperBound) ? "Charging to full" : "Charging to \(c.limit)%"
         case .holding:
             if s.percent > c.limit + 1 {
@@ -568,7 +590,7 @@ struct LimitStage: View {
             return c.sailing ? "Holding \(c.limit)%\(wall) · charges again at \(c.limit - c.sailRange)%" : "Holding at \(c.limit)%\(wall)"
         case .discharging: return "Above the limit — running on battery down to \(c.limit)%"
         case .heat: return String(format: "Paused — battery is %.0f°, waiting for it to cool", s.temperature ?? 0)
-        case .topUp: return "Topping up to 100%, then back to \(c.limit)%"
+        case .topUp: return "Topping up to max, then back to \(c.limit)%"
         case .lowSafety: return "Below 10% — charging normally"
         case .unsupported: return "Charge control isn't supported on this Mac"
         }

@@ -11,7 +11,7 @@ enum PercentMode: String, CaseIterable, Identifiable {
         switch self {
         case .macOS: "The smoothed number from the battery controller, same as pmset."
         case .trueCharge: "Remaining ÷ full capacity, straight from the cells — like AlDente's hardware percentage."
-        case .ofDesign: "Remaining ÷ capacity when new. At 90% health a full battery shows 90%."
+        case .ofDesign: "True charge × health, so it's measured against the battery when new. At 90% health a full battery shows 90%."
         }
     }
     var chargeScale: ChargeScale {

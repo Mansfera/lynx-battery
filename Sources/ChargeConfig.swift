@@ -54,7 +54,7 @@ struct ChargeConfig: Codable, Equatable {
     var sleepUntilLimit = false
     var magsafeLED = false
     var discharge = true      // автоматично розряджати до ліміту, якщо заряд вищий
-    var topUp = false         // один раз до 100 %, потім назад до ліміту
+    var topUp = false         // один раз до повного, потім назад до ліміту
     /// Запит на режим енергозбереження (ПКМ по іконці): хелпер застосовує pmset без пароля.
     var lowPower = false
     var lowPowerRequestAt: Date?
