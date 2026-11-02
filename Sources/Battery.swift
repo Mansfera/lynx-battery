@@ -24,6 +24,11 @@ struct BatterySnapshot: Equatable {
     var designPercent: Int = 0
     /// Скільки покаже designPercent на повному заряді — те саме число, що health, і стеля ліміту в цьому режимі.
     var designTop: Int = 100
+    /// Стеля числа percent у вибраному режимі: його ставить апка разом із percent. У сирому знімку хелпера лишається 100.
+    var percentTop: Int = 100
+
+    /// Поріг вище стелі число не досягне ніколи, тож для нього «досягнуто» означає справді повну батарею.
+    func reachedHigh(_ threshold: Int) -> Bool { threshold > percentTop ? fullyCharged : percent >= threshold }
 
     /// Підключено, але батарея сідає. Причин багато: щойно підключили, заряд тримає ліміт або сама macOS.
     var drainingOnAC: Bool { onAC && !isCharging && watts < -1.5 }
@@ -47,9 +52,36 @@ struct BatterySnapshot: Equatable {
         }
         if chargerTooWeak { return "Plugged in, still draining" }
         if drainingOnAC { return "Plugged in, using battery" }
-        if onAC { return fullyCharged || percent >= 100 ? "Charged · on power adapter" : "On adapter · not charging" }
+        if onAC { return fullyCharged || percent >= percentTop ? "Charged · on power adapter" : "On adapter · not charging" }
         if let m = minutes { return "On battery · \(formatMinutes(m)) left" }
         return "On battery · estimating…"
+    }
+}
+
+/// Які високі пороги вже спрацювали: кожен сповіщає один раз, поки заряд не впаде нижче нього.
+struct HighAlertTracker {
+    private(set) var fired: Set<Int> = []
+
+    /// Старт: вважаємо вже пройденими пороги, за якими ми зараз стоїмо, щоб не спамити.
+    mutating func start(_ thresholds: Set<Int>, _ b: BatterySnapshot) {
+        fired = thresholds.filter { b.reachedHigh($0) }
+    }
+
+    /// Поріг, про який треба сповістити зараз: спрацьовує лише при зарядці, найвищий із досягнутих.
+    mutating func update(_ thresholds: Set<Int>, _ b: BatterySnapshot) -> Int? {
+        var hit: Int?
+        if b.onAC, let t = thresholds.sorted(by: >).first(where: { b.reachedHigh($0) && !fired.contains($0) }) {
+            fired.formUnion(thresholds.filter { $0 <= t })
+            hit = t
+        }
+        // Поріг вище стелі скидаємо відносно стелі: інакше він скинувся б одразу й сповіщав щоразу
+        fired = fired.filter { b.percent >= min($0, b.percentTop) - 2 }
+        return hit
+    }
+
+    /// Поріг вище стелі досягається лише на повній батареї, тож і заголовок той самий, що для 100.
+    static func title(_ threshold: Int, _ b: BatterySnapshot) -> String {
+        threshold >= 100 || threshold > b.percentTop ? "Fully charged" : "Charged to \(b.percent)%"
     }
 }
 

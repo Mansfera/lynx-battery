@@ -22,8 +22,9 @@ struct AlertSpec {
 /// Порівнює попередній і новий стан та вирішує, що показати.
 final class AlertEngine {
     private var prev: BatterySnapshot?
+    private var mode: PercentMode?
     private var firedLow: Set<Int> = []
-    private var firedHigh: Set<Int> = []
+    private var high = HighAlertTracker()
     private var firedDevices: Set<String> = []
     let presenter = AlertPresenter()
     private var s: Settings { .shared }
@@ -33,12 +34,14 @@ final class AlertEngine {
         evaluateHeat(b)
         // Повноекранний поріг — теж поріг: інакше на 3 % після вже пройдених 5 % нічого не спрацює
         let low = s.fullScreenAt > 0 ? s.lowAlerts.union([s.fullScreenAt]) : s.lowAlerts
-        guard let p = prev else {
-            // Старт: вважаємо вже пройденими пороги, за якими ми зараз стоїмо, щоб не спамити.
+        if mode != s.percentMode {
+            // Старт або зміна режиму: вважаємо вже пройденими пороги, за якими ми зараз стоїмо, щоб не спамити.
+            // Після перемикання число стрибає, хоча заряд той самий — це не привід сповіщати.
+            mode = s.percentMode
             firedLow = Set(low.filter { b.percent <= $0 })
-            firedHigh = Set(s.highAlerts.filter { b.percent >= $0 })
-            return
+            high.start(s.highAlerts, b)
         }
+        guard let p = prev else { return }
 
         if b.onAC != p.onAC {
             if b.onAC {
@@ -72,15 +75,10 @@ final class AlertEngine {
         firedLow = firedLow.filter { b.percent <= $0 + 2 }   // скидаємо, коли піднялись вище порогу
 
         // Високий заряд: при зарядці.
-        if b.onAC {
-            for t in s.highAlerts.sorted(by: >) where b.percent >= t && !firedHigh.contains(t) {
-                firedHigh.formUnion(s.highAlerts.filter { $0 <= t })
-                presenter.show(AlertSpec(title: t >= 100 ? "Fully charged" : "Charged to \(b.percent)%",
-                                         subtitle: "You can unplug now", symbol: "battery.100percent.bolt", tone: .good))
-                break
-            }
+        if let t = high.update(s.highAlerts, b) {
+            presenter.show(AlertSpec(title: HighAlertTracker.title(t, b),
+                                     subtitle: "You can unplug now", symbol: "battery.100percent.bolt", tone: .good))
         }
-        firedHigh = firedHigh.filter { b.percent >= $0 - 2 }
     }
 
     private var firedFull: Set<String> = []
