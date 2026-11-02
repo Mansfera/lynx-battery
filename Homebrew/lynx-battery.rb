@@ -10,7 +10,7 @@ cask "lynx-battery" do
   homepage "https://github.com/Mansfera/lynx-battery"
 
   depends_on arch: :arm64
-  depends_on macos: ">= :sonoma"
+  depends_on macos: :sonoma
 
   app "Lynx Battery.app"
 
