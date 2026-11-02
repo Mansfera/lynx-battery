@@ -3,7 +3,7 @@ set -e
 DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$DIR"
 
-APP="Etherlynx Battery.app"
+APP="Lynx Battery.app"
 echo "Building $APP ..."
 
 rm -rf "$APP"
@@ -20,7 +20,7 @@ esac
 
 # swift-version 5 — без суворої Swift 6 concurrency
 swiftc Sources/*.swift ${SIM[@]+"${SIM[@]}"} \
-    -o "$APP/Contents/MacOS/EtherlynxBattery" \
+    -o "$APP/Contents/MacOS/LynxBattery" \
     -framework Cocoa -framework IOKit -framework SwiftUI -framework ServiceManagement -framework CoreBluetooth \
     -swift-version 5 \
     -target arm64-apple-macos14.0 \

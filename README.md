@@ -1,4 +1,4 @@
-# Etherlynx Battery
+# Lynx Battery
 
 A macOS menu-bar battery app: live charge, health, cycles and temperature, a power-flow view, energy by app, Bluetooth device batteries, custom alerts — and a charge limit with Sailing mode and heat protection.
 
@@ -20,7 +20,7 @@ The app is ad-hoc signed, not notarized. The Homebrew cask clears the quarantine
 
 ```sh
 ./build.sh
-open "Etherlynx Battery.app"
+open "Lynx Battery.app"
 ```
 
 To publish a new version (builds, packages the DMG, creates the GitHub release and bumps the Homebrew cask): `./release.sh 1.0.1`.

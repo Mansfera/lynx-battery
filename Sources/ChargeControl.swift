@@ -167,12 +167,12 @@ final class ChargeControl: ObservableObject {
     /// osascript окремим процесом: NSAppleScript поза головним потоком ненадійний і мовчки нічого не робить.
     private func runAsAdmin(_ script: String, done: @escaping (Bool) -> Void) {
         busy = true; error = nil
-        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("etherlynx-battery-\(UUID().uuidString).sh")
+        let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("lynx-battery-\(UUID().uuidString).sh")
         do { try script.write(to: tmp, atomically: true, encoding: .utf8) }
         catch { busy = false; self.error = "Couldn't write the install script."; done(false); return }
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-        p.arguments = ["-e", "do shell script \"/bin/sh '\(tmp.path)'\" with administrator privileges with prompt \"Etherlynx Battery wants to install its charge-limit helper.\""]
+        p.arguments = ["-e", "do shell script \"/bin/sh '\(tmp.path)'\" with administrator privileges with prompt \"Lynx Battery wants to install its charge-limit helper.\""]
         let errPipe = Pipe()
         p.standardError = errPipe
         p.standardOutput = FileHandle.nullDevice
@@ -180,7 +180,7 @@ final class ChargeControl: ObservableObject {
             let msg = String(data: errPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
                 .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             try? FileManager.default.removeItem(at: tmp)
-            NSLog("Etherlynx Battery admin script exit \(proc.terminationStatus): \(msg)")
+            NSLog("Lynx Battery admin script exit \(proc.terminationStatus): \(msg)")
             DispatchQueue.main.async {
                 guard let self else { return }
                 self.busy = false

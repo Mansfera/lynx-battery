@@ -457,7 +457,7 @@ struct FullScreenAlertView: View {
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 10) {
                     Griffin(light: false).frame(width: 22, height: 22)
-                    Text("Etherlynx").font(Brand.text(16, .semibold)).foregroundStyle(Brand.ink)
+                    Text("Lynx Battery").font(Brand.text(16, .semibold)).foregroundStyle(Brand.ink)
                 }
                 .padding(.top, 48)
                 Spacer()

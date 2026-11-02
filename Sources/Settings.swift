@@ -75,7 +75,7 @@ final class Settings: ObservableObject {
             do {
                 if launchAtLogin { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
             } catch {
-                NSLog("Etherlynx Battery: launch at login — \(error.localizedDescription)")
+                NSLog("Lynx Battery: launch at login — \(error.localizedDescription)")
                 DispatchQueue.main.async { self.launchAtLogin = SMAppService.mainApp.status == .enabled }
             }
         }

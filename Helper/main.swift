@@ -1,7 +1,7 @@
 import Foundation
 import IOKit.pwr_mgt
 
-// Root-хелпер Etherlynx Battery. Тримає ліміт заряду, Sailing, Heat Protection, Top Up, LED MagSafe.
+// Root-хелпер Lynx Battery. Тримає ліміт заряду, Sailing, Heat Protection, Top Up, LED MagSafe.
 //
 // Важелі залежать від прошивки:
 //  • межа в прошивці — bfF0, bfD0, bfE0 (прошивки 20xxx): заряд зупиняє сама прошивка, адаптер живить Mac, і так само уві сні;
@@ -143,7 +143,7 @@ func preventSleep(_ on: Bool) {
     if on, sleepAssertion == 0 {
         IOPMAssertionCreateWithName(kIOPMAssertPreventUserIdleSystemSleep as CFString,
                                     IOPMAssertionLevel(kIOPMAssertionLevelOn),
-                                    "Etherlynx Battery: charging to the limit" as CFString, &sleepAssertion)
+                                    "Lynx Battery: charging to the limit" as CFString, &sleepAssertion)
     } else if !on, sleepAssertion != 0 {
         IOPMAssertionRelease(sleepAssertion)
         sleepAssertion = 0

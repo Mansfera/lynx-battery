@@ -21,10 +21,10 @@ enum AppMenu {
         let redo = NSMenuItem(title: "Redo", action: Selector(("redo:")), keyEquivalent: "z")
         redo.keyEquivalentModifierMask = [.command, .shift]
         let main = NSMenu()
-        main.addItem(submenu("Etherlynx Battery", [
+        main.addItem(submenu("Lynx Battery", [
             NSMenuItem(title: "Settings…", action: #selector(SettingsOpener.openSettings), keyEquivalent: ","),
             .separator(),
-            NSMenuItem(title: "Quit Etherlynx Battery", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"),
+            NSMenuItem(title: "Quit Lynx Battery", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"),
         ]))
         main.addItem(submenu("Edit", [
             NSMenuItem(title: "Undo", action: Selector(("undo:")), keyEquivalent: "z"),
@@ -213,7 +213,7 @@ struct AboutSettings: View {
                 HStack(spacing: 14) {
                     Image(nsImage: NSApp.applicationIconImage).resizable().frame(width: 56, height: 56)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Etherlynx Battery").font(Brand.text(15, .semibold))
+                        Text("Lynx Battery").font(Brand.text(15, .semibold))
                         Text("Version \(info("CFBundleShortVersionString")) (\(info("CFBundleVersion")))").foregroundStyle(.secondary)
                         Text(info("NSHumanReadableCopyright")).foregroundStyle(.secondary)
                     }
@@ -223,7 +223,7 @@ struct AboutSettings: View {
                 LabeledContent {
                     Button("Quit") { NSApp.terminate(nil) }
                 } label: {
-                    Text("Quit Etherlynx Battery")
+                    Text("Quit Lynx Battery")
                     // Ліміт тримає root-хелпер, йому апка не потрібна
                     Text(model.charge.installed
                          ? "Alerts and the menu bar icon stop until you open it again. The charge limit keeps working."
