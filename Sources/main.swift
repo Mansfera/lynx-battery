@@ -39,14 +39,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, Set
             .store(in: &bag)
         model.start()
 
-        // Відкрити поповер ззовні (для перевірки розміру без кліку по меню-бару)
+        // Відкрити поповер ззовні (повторний запуск або перевірка розміру без кліку по меню-бару)
         DistributedNotificationCenter.default().addObserver(forName: Notification.Name("com.mansfera.lynxbattery.open"), object: nil, queue: .main) { [weak self] n in
             if let tab = (n.object as? String).flatMap(AppModel.Tab.init(rawValue:)) { self?.model.tab = tab }
-            if self?.popover.isShown == false { self?.toggle() }
+            self?.showPopover()
         }
     }
 
     func applicationWillTerminate(_ n: Notification) { model.history.save() }
+
+    // LSUIElement не в Dock: повторний клік у Finder / Spotlight / Launchpad має відкрити поповер.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        showPopover()
+        return false
+    }
 
     @objc func openSettings() {
         popover.performClose(nil)
@@ -102,7 +108,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, Set
     }
 
     @objc private func toggle() {
-        guard let button = item.button else { return }
         if NSApp.currentEvent?.type == .rightMouseUp, model.rightClickTogglesLowPower() {
             model.toggleLowPower()
             return
@@ -110,16 +115,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, Set
         if popover.isShown {
             popover.performClose(nil)
         } else {
-            model.refresh()
-            model.refreshDevices()
-            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-            popover.contentViewController?.view.window?.makeKey()
+            showPopover()
         }
+    }
+
+    private func showPopover() {
+        guard let button = item.button else { return }
+        if popover.isShown { return }
+        model.refresh()
+        model.refreshDevices()
+        popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        popover.contentViewController?.view.window?.makeKey()
     }
 }
 
 AppData.migrate()
 let app = NSApplication.shared
+if let id = Bundle.main.bundleIdentifier,
+   NSRunningApplication.runningApplications(withBundleIdentifier: id)
+        .contains(where: { $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }) {
+    DistributedNotificationCenter.default().postNotificationName(
+        Notification.Name("com.mansfera.lynxbattery.open"),
+        object: nil, userInfo: nil, deliverImmediately: true)
+    exit(0)
+}
 let delegate = AppDelegate()
 app.delegate = delegate
 app.setActivationPolicy(.accessory)

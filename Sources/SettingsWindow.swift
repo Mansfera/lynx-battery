@@ -282,15 +282,17 @@ struct AboutSettings: View {
     }
 
     var body: some View {
-        SettingsPane(height: 284) {
+        SettingsPane(height: 322) {
             Section {
                 HStack(spacing: 14) {
                     Image(nsImage: NSApp.applicationIconImage).resizable().frame(width: 56, height: 56)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Lynx Battery").font(Brand.text(15, .semibold))
                         Text("Version \(info("CFBundleShortVersionString")) (\(info("CFBundleVersion")))").foregroundStyle(.secondary)
-                        Text("© 2026 Designed & developed by \(link("Etherlynx Studio", "https://etherlynx.xyz/")) & \(link("Ihor Kharkholyuk", "https://kharkholy.uk"))")
-                            .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                        Text("© 2026 Designed & developed by")
+                            .foregroundStyle(.secondary)
+                        Text("\(link("Etherlynx Studio", "https://etherlynx.xyz/")) & \(link("Ihor Kharkholyuk", "https://kharkholy.uk"))")
+                            .foregroundStyle(.secondary)
                         Text("Made with Claude").font(Brand.text(11)).foregroundStyle(.secondary).padding(.top, 2)
                     }
                 }
