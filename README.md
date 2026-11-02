@@ -12,7 +12,7 @@ Requires macOS 14 or later on Apple silicon.
 brew install --cask mansfera/tap/lynx-battery
 ```
 
-If Homebrew asks you to trust the tap first, run `brew trust --tap mansfera/tap`. To update, run `brew upgrade --cask lynx-battery`. If the charge limit is on, the upgrade asks for your password to put its helper back, and charging runs as normal for the few seconds that takes.
+If Homebrew asks you to trust the tap first, run `brew trust --tap mansfera/tap`. To update, run `brew upgrade --cask lynx-battery`. If the charge-limit helper is installed, the upgrade asks for your password to replace it, and charging runs as normal for the few seconds that takes. With no helper it doesn't ask.
 
 Or download the DMG from [Releases](https://github.com/Mansfera/lynx-battery/releases) and drag the app to Applications.
 
@@ -28,7 +28,7 @@ open "Lynx Battery.app"
 ## Features
 
 ### Overview
-Charge, health (full ÷ design capacity), cycles, battery temperature, how much power the Mac is drawing, 24-hour, 7-day and 30-day history, and Low Power Mode. Right-click the menu bar icon to toggle Low Power Mode.
+Charge, health (full ÷ design capacity), cycles, battery temperature, how much power the Mac is drawing, 24-hour, 7-day and 30-day history, and Low Power Mode. With the charge-limit helper installed, Settings can make right-clicking the menu bar icon toggle Low Power Mode. Otherwise right-click opens the popover.
 
 ### Charge
 - A charge limit from 15% to full.
@@ -97,6 +97,7 @@ Tests/charge-limit.sh   # limit bounds and scale conversion
 Tests/charge-start.sh   # charging starts after a limit change, live charge state
 Tests/energy-history.sh # impossible readings stay out of energy by app
 Tests/helper-restore.sh # the cask puts the helper back after an upgrade
+Tests/right-click.sh    # right-click only toggles Low Power Mode without a password prompt
 Tests/desktop-mode.sh   # Macs without a battery, renders each screen to PNG
 Tests/power-breakdown.sh # the macOS row's power breakdown, renders it to PNG
 ```

@@ -411,14 +411,18 @@ struct Legend: View {
 
 struct LowPowerRow: View {
     @ObservedObject var model: AppModel
+    @ObservedObject private var settings = Settings.shared
     let b: BatterySnapshot
     @Environment(\.palette) private var pal
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 1) {
                 Text("Low Power Mode").font(Brand.text(12.5, .medium))
-                Text(model.charge.installed ? "Or right-click the menu bar icon" : "Or right-click the menu bar icon · asks for your password")
-                    .font(Brand.text(10.5)).foregroundStyle(pal.muted)
+                if !model.charge.installed {
+                    Text("Asks for your password").font(Brand.text(10.5)).foregroundStyle(pal.muted)
+                } else if settings.rightClickLowPower {
+                    Text("Or right-click the menu bar icon").font(Brand.text(10.5)).foregroundStyle(pal.muted)
+                }
             }
             Spacer()
             if model.lowPowerBusy { ProgressView().controlSize(.small) }

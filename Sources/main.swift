@@ -103,8 +103,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, Set
 
     @objc private func toggle() {
         guard let button = item.button else { return }
-        // ПКМ — швидкий перемикач енергозбереження; без батареї просто відкриває поповер
-        if NSApp.currentEvent?.type == .rightMouseUp, model.battery != nil {
+        if NSApp.currentEvent?.type == .rightMouseUp, model.rightClickTogglesLowPower() {
             model.toggleLowPower()
             return
         }

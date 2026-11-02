@@ -13,10 +13,15 @@ import IOKit.pwr_mgt
 
 setvbuf(stdout, nil, _IOLBF, 0)
 
-// Cask запускає це через sudo наприкінці `brew upgrade`. До будь-яких ключів SMC: це не демон, він лише ставить себе назад.
+// Cask запускає це без root перед --restore: з увімкненим лімітом хелпер повертається, навіть якщо до оновлення його не було.
+if CommandLine.arguments.count == 3, CommandLine.arguments[1] == "--mark-restore" {
+    guard ChargeInstall.shouldRestore(config: FileManager.default.contents(atPath: ChargePaths.config)) else { exit(0) }
+    exit(FileManager.default.createFile(atPath: CommandLine.arguments[2], contents: nil) ? 0 : 1)
+}
+
+// Cask запускає це через sudo наприкінці `brew upgrade`, коли є позначка. До будь-яких ключів SMC: це не демон, він лише ставить себе назад.
 if CommandLine.arguments.dropFirst().first == "--restore" {
     guard getuid() == 0 else { print("--restore needs root"); exit(1) }
-    guard ChargeInstall.shouldRestore(config: FileManager.default.contents(atPath: ChargePaths.config)) else { exit(0) }
     let attrs = try? FileManager.default.attributesOfItem(atPath: ChargePaths.dir)
     guard let owner = (attrs?[.ownerAccountID] as? NSNumber)?.uint32Value, owner != 0, CommandLine.arguments[0].hasPrefix("/") else {
         print("Can't restore the helper: reinstall it from the Charge tab.")
