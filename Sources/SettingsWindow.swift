@@ -143,7 +143,13 @@ struct GeneralSettings: View {
                     Text("Colour by level")
                     Text(hasBattery ? "Green when charging, blue when holding the limit, red when low, yellow in Low Power Mode." : "Red when a device is low.")
                 }
-                if hasBattery { Toggle("Animate while charging", isOn: $s.animateCharging) }
+                if hasBattery {
+                    Toggle(isOn: $s.animateCharging) {
+                        Text("Animate while charging")
+                        if s.minimalEnergy { Text("Off while Minimal energy use is on.") }
+                    }
+                    .disabled(s.minimalEnergy)
+                }
             } header: { SectionHead("Menu bar") }
             Section {
                 AppIconPicker(selection: $s.appIcon)
@@ -235,8 +241,9 @@ struct AlertSettings: View {
                 .onChange(of: s.sound) { _, v in NSSound(named: NSSound.Name(v))?.play() }
                 Toggle(isOn: $s.glow) {
                     Text("Screen glow")
-                    Text("Flashes the screen edges in the alert's colour.")
+                    Text(s.minimalEnergy ? "Off while Minimal energy use is on." : "Flashes the screen edges in the alert's colour.")
                 }
+                .disabled(s.minimalEnergy)
                 Toggle("Keep alerts until clicked", isOn: $s.persistent)
             } header: { SectionHead("Style") }
         }

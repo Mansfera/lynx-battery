@@ -43,6 +43,16 @@ final class BLEBattery: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate
         timer?.tolerance = 10
     }
 
+    /// Мінімальне споживання: без сканувань і з'єднань. Разом із central зникають і наші з'єднання; заряд, що вже прочитали, старіє сам.
+    func stop() {
+        timer?.invalidate(); timer = nil
+        central?.stopScan()
+        central = nil
+        peripherals = [:]
+        scanned = []
+        lastConnected = -1
+    }
+
     func poll() {
         guard let c = central, c.state == .poweredOn else { return }
         // Пристрої, які вже тримає система (iPhone через Continuity, навушники) і які мають Battery Service

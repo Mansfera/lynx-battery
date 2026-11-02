@@ -72,6 +72,8 @@ final class Settings: ObservableObject {
     @Published var animateCharging: Bool { didSet { d.set(animateCharging, forKey: "animate") } }
     @Published var persistent: Bool { didSet { d.set(persistent, forKey: "persistent") } }
     @Published var heatAlert: Bool { didSet { d.set(heatAlert, forKey: "heat") } }
+    /// Мінімум енергії: без замірів по апках, анімацій і Bluetooth, решта читається рідше. Ліміт заряду й сповіщення лишаються.
+    @Published var minimalEnergy: Bool { didSet { d.set(minimalEnergy, forKey: "minimalEnergy") } }
     @Published var deviceRules: [String: DeviceRule] {
         didSet { d.set(try? JSONEncoder().encode(deviceRules), forKey: "deviceRules") }
     }
@@ -119,6 +121,7 @@ final class Settings: ObservableObject {
         animateCharging = d.bool(forKey: "animate")
         persistent = d.bool(forKey: "persistent")
         heatAlert = d.bool(forKey: "heat")
+        minimalEnergy = d.bool(forKey: "minimalEnergy")
         deviceRules = (d.data(forKey: "deviceRules")).flatMap { try? JSONDecoder().decode([String: DeviceRule].self, from: $0) } ?? [:]
     }
 }

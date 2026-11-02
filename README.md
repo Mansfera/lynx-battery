@@ -42,6 +42,8 @@ Charge, health (full ÷ design capacity), cycles, battery temperature, how much 
 ### Power
 A power-flow diagram from the adapter to the battery and the Mac, plus energy use by app (live, 24 hours, 7 days and 30 days), grouped by app bundle.
 
+Minimal energy use cuts the app's own draw. It stops energy sampling, animations, the screen glow and Bluetooth scans, and reads the battery less often while the menu is closed. Devices refresh only when you open the menu, so their alerts can come late. The charge limit and battery alerts keep working.
+
 ### Devices
 AirPods (left, right and case, even before they connect), Magic Mouse, Keyboard and Trackpad, a paired iPhone or iPad nearby, and anything connected that exposes the Bluetooth Battery Service.
 

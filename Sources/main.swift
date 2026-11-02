@@ -75,7 +75,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, Set
         let style = Settings.shared.iconStyle
         // Смуга біжить по іконці три проходи після підключення, далі — статична блискавка.
         // Постійна анімація коштувала 2–3 % CPU: менюбар-апка не має так їсти батарею, яку стереже.
-        if b.isCharging && !wasCharging && Settings.shared.animateCharging && animTimer == nil {
+        if b.isCharging && !wasCharging && Settings.shared.animateCharging && !Settings.shared.minimalEnergy && animTimer == nil {
             sweepFrames = 30
             animTimer = Timer.scheduledTimer(withTimeInterval: 0.12, repeats: true) { [weak self] t in
                 guard let self else { return }

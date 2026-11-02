@@ -16,7 +16,7 @@ final class AppModel: ObservableObject {
     @Published var apps: [AppEnergy] = []
     @Published var expandedApp: String?
     @Published var lowPowerBusy = false
-    @Published var popoverShown = false
+    @Published var popoverShown = false { didSet { if popoverShown != oldValue { scheduleSampling() } } }
     let energy = EnergyMonitor()
     let charge = ChargeControl()
     let ble = BLEBattery()
@@ -31,6 +31,7 @@ final class AppModel: ObservableObject {
     private var deviceTimer: Timer?
     private var percentMode: AnyCancellable?
     private var chargeStatus: AnyCancellable?
+    private var energyMode: AnyCancellable?
     private let deviceQueue = DispatchQueue(label: "sik.devices", qos: .utility)
 
     func start() {
@@ -39,24 +40,61 @@ final class AppModel: ObservableObject {
         NotificationCenter.default.addObserver(forName: .NSProcessInfoPowerStateDidChange, object: nil, queue: .main) { [weak self] _ in
             self?.refresh()
         }
-        timer = Timer.scheduledTimer(withTimeInterval: 20, repeats: true) { [weak self] _ in self?.refresh() }
-        timer?.tolerance = 5
         // Перемикач відсотка: число й ліміт міняються одразу, а не за наступним оновленням
         percentMode = Settings.shared.$percentMode.dropFirst().receive(on: DispatchQueue.main).sink { [weak self] _ in self?.refresh() }
         // Іконка показує стан хелпера, тож малюємо її одразу, щойно він змінився
         chargeStatus = charge.$status.map { $0?.wallHold }.removeDuplicates().receive(on: DispatchQueue.main).sink { [weak self] _ in self?.onChange?() }
         ble.onChange = { [weak self] in self?.mergeDevices() }
-        ble.start()
-        refreshDevices()
-        deviceTimer = Timer.scheduledTimer(withTimeInterval: 90, repeats: true) { [weak self] _ in self?.refreshDevices() }
-        deviceTimer?.tolerance = 15
-        // Енергію по апках пишемо раз на 2 хв у фоні; поки поповер відкритий — частіше.
-        sampleEnergy()
-        energyTimer = Timer.scheduledTimer(withTimeInterval: 120, repeats: true) { [weak self] _ in self?.sampleEnergy() }
-        energyTimer?.tolerance = 20
+        energyMode = Settings.shared.$minimalEnergy.dropFirst().receive(on: DispatchQueue.main).sink { [weak self] _ in self?.applyEnergyMode() }
+        applyEnergyMode()
+    }
+
+    /// Запускає або зупиняє все фонове під перемикач «Minimal energy use».
+    private func applyEnergyMode() {
+        let minimal = Settings.shared.minimalEnergy
+        deviceTimer?.invalidate(); deviceTimer = nil
+        energyTimer?.invalidate(); energyTimer = nil
+        charge.minimalEnergy = minimal
+        charge.setVisible(popoverShown)
+        if minimal {
+            // Пристрої читаємо лише при відкритті поповера; старих чисел під виглядом живих не лишаємо
+            ble.stop()
+            apps = []
+            wattHistory = []
+        } else {
+            ble.start()
+            refreshDevices()
+            deviceTimer = Timer.scheduledTimer(withTimeInterval: 90, repeats: true) { [weak self] _ in self?.refreshDevices() }
+            deviceTimer?.tolerance = 15
+            // Енергію по апках пишемо раз на 2 хв у фоні; поки поповер відкритий — частіше.
+            sampleEnergy()
+            energyTimer = Timer.scheduledTimer(withTimeInterval: 120, repeats: true) { [weak self] _ in self?.sampleEnergy() }
+            energyTimer?.tolerance = 20
+        }
+        scheduleSampling()
+    }
+
+    /// Мінімальний режим пригальмовує лише фон: відкритий поповер показує свіжі числа, бо на них дивляться.
+    private var sampleRarely: Bool { Settings.shared.minimalEnergy && !popoverShown }
+    /// Заряд і так приходить сповіщенням IOPS, таймер лише страхує.
+    var refreshInterval: TimeInterval { sampleRarely ? 300 : 20 }
+    var powerInterval: TimeInterval { sampleRarely ? 60 : Self.wattInterval }
+
+    private func scheduleSampling() {
+        if timer?.timeInterval != refreshInterval {
+            timer?.invalidate()
+            timer = Timer.scheduledTimer(withTimeInterval: refreshInterval, repeats: true) { [weak self] _ in self?.refresh() }
+            timer?.tolerance = refreshInterval / 4
+        }
+        if let t = powerTimer, t.timeInterval != powerInterval { t.invalidate(); startPowerTimer() }
+    }
+
+    private func startPowerTimer() {
+        powerTimer = Timer.scheduledTimer(withTimeInterval: powerInterval, repeats: true) { [weak self] _ in self?.samplePower() }
     }
 
     func sampleEnergy() {
+        guard !Settings.shared.minimalEnergy else { return }
         energy.sample { [weak self] in self?.apps = self?.energy.apps ?? [] }
     }
 
@@ -93,7 +131,7 @@ final class AppModel: ObservableObject {
             if tab == .overview || tab == .charge { tab = .power }
             if powerTimer == nil {
                 samplePower()
-                powerTimer = Timer.scheduledTimer(withTimeInterval: Self.wattInterval, repeats: true) { [weak self] _ in self?.samplePower() }
+                startPowerTimer()
             }
             onChange?()
             return
@@ -121,8 +159,11 @@ final class AppModel: ObservableObject {
         let smooth = macWatts.map { ($0 + w) / 2 } ?? w
         let changed = macWatts?.rounded() != smooth.rounded()
         macWatts = smooth
-        wattHistory.append(smooth)
-        if wattHistory.count > Int(300 / Self.wattInterval) { wattHistory.removeFirst() }
+        // Історія розрахована на заміри раз на wattInterval: у мінімальному режимі лише поточне число
+        if !Settings.shared.minimalEnergy {
+            wattHistory.append(smooth)
+            if wattHistory.count > Int(300 / Self.wattInterval) { wattHistory.removeFirst() }
+        }
         if changed { onChange?() }
     }
 

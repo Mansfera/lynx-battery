@@ -177,7 +177,7 @@ final class AlertPresenter: NSObject {
         panel.contentView = FirstMouseHostingView(rootView: view.frame(width: size.width, height: size.height))
         panel.orderFrontRegardless()
         pill = panel
-        if Settings.shared.glow { flashGlow(spec.color, on: screen) }
+        if Settings.shared.glow && !Settings.shared.minimalEnergy { flashGlow(spec.color, on: screen) }
         if !Settings.shared.persistent { scheduleHide(after: 3.2) }
     }
 

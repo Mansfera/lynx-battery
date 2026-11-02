@@ -13,6 +13,8 @@ final class ChargeControl: ObservableObject {
     private var loadingFromFile = false
     private var previewing = false
     private var timer: Timer?
+    /// Мінімальне споживання: у фоні стан читає лише оновлення моделі, власний таймер зайвий.
+    var minimalEnergy = false
 
     init() {
         installed = FileManager.default.fileExists(atPath: ChargePaths.daemonPlist)
@@ -25,9 +27,11 @@ final class ChargeControl: ObservableObject {
     /// Хелпер пише стан раз на 15 с, а бачити його можна лише в поповері: у фоні читаємо рідко.
     func setVisible(_ visible: Bool) {
         guard !previewing else { return }
-        timer?.invalidate()
-        timer = Timer.scheduledTimer(withTimeInterval: visible ? 5 : 45, repeats: true) { [weak self] _ in self?.readStatus() }
-        timer?.tolerance = visible ? 1 : 10
+        timer?.invalidate(); timer = nil
+        if visible || !minimalEnergy {
+            timer = Timer.scheduledTimer(withTimeInterval: visible ? 5 : 45, repeats: true) { [weak self] _ in self?.readStatus() }
+            timer?.tolerance = visible ? 1 : 10
+        }
         if visible { readStatus(); checkHelper() }
     }
 
