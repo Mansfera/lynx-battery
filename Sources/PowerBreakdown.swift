@@ -1,12 +1,29 @@
+import CoreAudio
 import CoreGraphics
 import Foundation
+import IOKit
+import SystemConfiguration
 
 struct PowerPart: Identifiable {
     var name: String
     var watts: Double?                 // nil — ця частина є, але свою потужність не повідомляє
     var detail: String?
     var estimated = false
+    var inside: [PowerActivity] = []   // що всередині цієї частини, але без власних ватт
     var id: String { name }
+}
+
+/// Датчика потужності немає, тож показуємо, чи ця частина зараз працює. Ватти не вигадуємо: навантаження SSD і Wi-Fi на M3 не дало окремої лінії серед ключів SMC.
+struct PowerActivity: Identifiable, Equatable {
+    var name: String
+    var value: String
+    var id: String { name }
+
+    static func rate(_ bytesPerSecond: Double) -> String {
+        if bytesPerSecond < 1024 { return "Idle" }
+        if bytesPerSecond < 1024 * 1024 { return String(format: "%.0f KB/s", bytesPerSecond / 1024) }
+        return String(format: "%.1f MB/s", bytesPerSecond / (1024 * 1024))
+    }
 }
 
 /// Що зараз із вбудованим екраном. Зовнішній монітор живиться сам, тож у потужності Mac його панелі немає.
@@ -32,7 +49,7 @@ struct PowerBreakdown {
     var parts: [PowerPart]
 
     /// channels — ватти каналів «Energy Model»; total — PSTR за той самий проміжок, nil якщо цей Mac його не повідомляє.
-    static func make(channels: [String: Double], total: Double?, display: DisplayState) -> PowerBreakdown {
+    static func make(channels: [String: Double], total: Double?, display: DisplayState, activity: [PowerActivity] = []) -> PowerBreakdown {
         func sum(_ matches: (String) -> Bool) -> Double { channels.reduce(0) { matches($1.key) ? $0 + $1.value : $0 } }
         func prefixed(_ names: String...) -> Double { sum { key in names.contains { key.hasPrefix($0) } } }
 
@@ -43,23 +60,30 @@ struct PowerBreakdown {
             PowerPart(name: "CPU", watts: sum { $0.hasSuffix("CPU Energy") }),
             PowerPart(name: "GPU", watts: sum { $0.hasSuffix("GPU Energy") }),
             PowerPart(name: "Memory", watts: prefixed("DRAM", "AMCC", "DCS")),
-        ]
-        let optional = [
             PowerPart(name: "Neural Engine", watts: prefixed("ANE")),
             PowerPart(name: "Video & camera", watts: prefixed("AVE", "VDEC", "MSR", "ISP")),
+            PowerPart(name: "Rest of chip", watts: prefixed("SOC_")),
         ]
-        parts += optional.filter { ($0.watts ?? 0) >= visibleWatts }
 
         let known = parts.reduce(0) { $0 + ($1.watts ?? 0) }
         // Вимірювачі оновлюються не синхронно: на короткому проміжку сума частин буває трохи більшою за PSTR
         let whole = max(total ?? known, known)
-        if whole - known >= visibleWatts {
-            parts.append(PowerPart(name: "Everything else", watts: whole - known, detail: display.builtInOn && display.backlightEstimate == nil ? "Includes backlight" : "Wi-Fi, SSD, audio"))
-        }
+        parts.append(PowerPart(name: "Everything else", watts: total == nil ? nil : whole - known,
+                               detail: display.builtInOn && display.backlightEstimate == nil ? "Includes backlight" : "No sensors",
+                               inside: activity))
         return PowerBreakdown(total: whole, parts: parts)
     }
 
-    private static let visibleWatts = 0.05
+    /// Найбільші зверху, за тим числом, що на екрані: рівні за показаним числом не міняються місцями від дрібних стрибків.
+    var sortedByUsage: PowerBreakdown {
+        func shown(_ part: PowerPart) -> Double { part.watts.map { ($0 * 10).rounded() } ?? -1 }
+        var out = self
+        out.parts = parts.enumerated().sorted {
+            let (l, r) = (shown($0.element), shown($1.element))
+            return l != r ? l > r : $0.offset < $1.offset
+        }.map(\.element)
+        return out
+    }
 
     /// Без кривої для цієї моделі ватти екрана потрапляють у «Everything else».
     private static func displayPart(_ d: DisplayState, engine: Double) -> PowerPart {
@@ -162,6 +186,8 @@ final class PowerBreakdownMonitor {
     private var totals: [Double] = []
     private var ticks = 0
     private var latest: PowerBreakdown?
+    private var lastBytes: (at: Date, wifi: UInt32?, disk: UInt64)?
+    private lazy var wifiName = Self.wifiInterface()
 
     func reset() {
         queue.async { [self] in
@@ -169,6 +195,7 @@ final class PowerBreakdownMonitor {
             totals = []
             ticks = 0
             latest = nil
+            lastBytes = nil
         }
     }
 
@@ -177,15 +204,82 @@ final class PowerBreakdownMonitor {
             guard let counters else { return }
             if let w = SystemPower.readWatts() { totals.append(w) }
             // Перший такт задає початок проміжку, далі чекаємо повний проміжок
-            if ticks % Self.ticksPerReading == 0, let channels = counters.read() {
-                let total = totals.isEmpty ? nil : totals.reduce(0, +) / Double(totals.count)
-                let next = PowerBreakdown.make(channels: channels, total: total, display: Self.readDisplay()).smoothed(after: latest)
-                latest = next
-                totals = []
-                DispatchQueue.main.async { done(next) }
+            if ticks % Self.ticksPerReading == 0 {
+                let activity = readActivity()
+                if let channels = counters.read() {
+                    let total = totals.isEmpty ? nil : totals.reduce(0, +) / Double(totals.count)
+                    let next = PowerBreakdown.make(channels: channels, total: total, display: Self.readDisplay(), activity: activity).smoothed(after: latest)
+                    latest = next
+                    totals = []
+                    DispatchQueue.main.async { done(next) }
+                }
             }
             ticks += 1
         }
+    }
+
+    private func readActivity() -> [PowerActivity] {
+        let now = Date()
+        let wifi = wifiName.flatMap(Self.interfaceBytes)
+        let disk = Self.internalDiskBytes()
+        defer { lastBytes = (now, wifi, disk) }
+        var out: [PowerActivity] = []
+        if let last = lastBytes, now > last.at {
+            let seconds = now.timeIntervalSince(last.at)
+            // Лічильник інтерфейсу 32-бітний і переповнюється, тому віднімаємо з переносом
+            if let wifi, let was = last.wifi { out.append(PowerActivity(name: "Wi-Fi", value: PowerActivity.rate(Double(wifi &- was) / seconds))) }
+            if disk >= last.disk { out.append(PowerActivity(name: "SSD", value: PowerActivity.rate(Double(disk - last.disk) / seconds))) }
+        }
+        if let playing = Self.audioPlaying() { out.append(PowerActivity(name: "Audio", value: playing ? "Active" : "Idle")) }
+        return out
+    }
+
+    private static func wifiInterface() -> String? {
+        guard let all = SCNetworkInterfaceCopyAll() as? [SCNetworkInterface] else { return nil }
+        return all.first { SCNetworkInterfaceGetInterfaceType($0) == kSCNetworkInterfaceTypeIEEE80211 }
+            .flatMap { SCNetworkInterfaceGetBSDName($0) as String? }
+    }
+
+    private static func interfaceBytes(_ name: String) -> UInt32? {
+        var head: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&head) == 0, let head else { return nil }
+        defer { freeifaddrs(head) }
+        for ptr in sequence(first: head, next: { $0.pointee.ifa_next }) {
+            let ifa = ptr.pointee
+            guard String(cString: ifa.ifa_name) == name, ifa.ifa_addr?.pointee.sa_family == UInt8(AF_LINK), let data = ifa.ifa_data else { continue }
+            let stats = data.assumingMemoryBound(to: if_data.self).pointee
+            return stats.ifi_ibytes &+ stats.ifi_obytes
+        }
+        return nil
+    }
+
+    /// Лише внутрішній диск: образи й зовнішні накопичувачі теж мають IOBlockStorageDriver.
+    private static func internalDiskBytes() -> UInt64 {
+        var iterator: io_iterator_t = 0
+        guard IOServiceGetMatchingServices(kIOMainPortDefault, IOServiceMatching("IOBlockStorageDriver"), &iterator) == KERN_SUCCESS else { return 0 }
+        defer { IOObjectRelease(iterator) }
+        var total: UInt64 = 0
+        while case let driver = IOIteratorNext(iterator), driver != 0 {
+            defer { IOObjectRelease(driver) }
+            let protocolInfo = IORegistryEntrySearchCFProperty(driver, kIOServicePlane, "Protocol Characteristics" as CFString, nil,
+                                                               IOOptionBits(kIORegistryIterateRecursively | kIORegistryIterateParents)) as? [String: Any]
+            guard protocolInfo?["Physical Interconnect Location"] as? String == "Internal",
+                  let stats = IORegistryEntryCreateCFProperty(driver, "Statistics" as CFString, nil, 0)?.takeRetainedValue() as? [String: Any] else { continue }
+            total += (stats["Bytes (Read)"] as? UInt64 ?? 0) + (stats["Bytes (Write)"] as? UInt64 ?? 0)
+        }
+        return total
+    }
+
+    private static func audioPlaying() -> Bool? {
+        var device = AudioObjectID(0)
+        var size = UInt32(MemoryLayout<AudioObjectID>.size)
+        var address = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyDefaultOutputDevice, mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+        guard AudioObjectGetPropertyData(AudioObjectID(kAudioObjectSystemObject), &address, 0, nil, &size, &device) == noErr, device != 0 else { return nil }
+        var running = UInt32(0)
+        size = UInt32(MemoryLayout<UInt32>.size)
+        address.mSelector = kAudioDevicePropertyDeviceIsRunningSomewhere
+        guard AudioObjectGetPropertyData(device, &address, 0, nil, &size, &running) == noErr else { return nil }
+        return running != 0
     }
 
     private static func readDisplay() -> DisplayState {
