@@ -134,8 +134,13 @@ enum BatteryReader {
             designPercent = Int((Double(Swift.min(100, percent)) * worn).rounded())
             designTop = Int((worn * 100).rounded())
         }
-        let charging = flag("IsCharging")
+        var charging = flag("IsCharging")
         let ac = flag("ExternalConnected")
+        var mA = Double(num("InstantAmperage") ?? num("Amperage") ?? 0)
+        // AppleSmartBattery оновлює ці поля раз на хвилину, а заряд починається й зупиняється за секунди
+        if ac, !flag("FullyCharged"), let current = SMC.shared.chargeCurrent() {
+            (charging, mA) = liveCharge(current: current, amperage: mA)
+        }
 
         var minutes: Int?
         if charging {
@@ -145,7 +150,6 @@ enum BatteryReader {
         }
 
         let mV = Double(num("Voltage") ?? 0)
-        let mA = Double(num("InstantAmperage") ?? num("Amperage") ?? 0)
         let adapter = (d["AdapterDetails"] as? [String: Any])?["Watts"] as? NSNumber
         let tel = d["PowerTelemetryData"] as? [String: Any] ?? [:]
         func telW(_ k: String) -> Double { Double((tel[k] as? NSNumber)?.int64Value ?? 0) / 1000 }
@@ -175,6 +179,11 @@ enum BatteryReader {
             designPercent: designPercent,
             designTop: designTop
         )
+    }
+
+    /// Живий струм важливіший за останнє прочитане: є струм — заряджається; немає — зарядний струм із ioreg уже застарів, а розряд лишаємо.
+    static func liveCharge(current: Int, amperage: Double) -> (charging: Bool, mA: Double) {
+        current > 0 ? (true, Double(current)) : (false, min(0, amperage))
     }
 
     /// Миттєві оновлення при підключенні/відключенні зарядки.

@@ -83,6 +83,22 @@ struct ChargeConfig: Codable, Equatable {
     }
 }
 
+/// На якому значенні прошивки (її відсоток — як у macOS) зупинились, коли число дійшло до ліміту.
+/// Діє лише для цього ліміту: якби вона пережила підняття ліміту, прошивка так і не почала б заряджати.
+struct FirmwareHold {
+    private(set) var upper: Int?
+    private var limit: Int?
+
+    mutating func update(limit newLimit: Int, shown: Int, macPercent: Int, charging: Bool, willDrain: Bool) {
+        if newLimit != limit { upper = nil }
+        limit = newLimit
+        if willDrain || (charging && shown < newLimit) { upper = nil }
+        else if shown >= newLimit { upper = macPercent }
+    }
+
+    mutating func reset() { upper = nil }
+}
+
 struct ChargeStatus: Codable, Equatable {
     enum Mode: String, Codable {
         case off, charging, holding, discharging, heat, topUp, lowSafety, unsupported

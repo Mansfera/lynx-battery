@@ -599,7 +599,9 @@ struct LimitStage: View {
         let c = control.config
         switch s.mode {
         case .off: return c.enabled ? "On battery — the limit applies when you plug in" : "Limit off — charging normally to full"
-        case .charging: return c.limit >= Int(limitRange.upperBound) ? "Charging to full" : "Charging to \(c.limit)%"
+        case .charging:
+            if !b.isCharging { return "Waiting for charging to start" }
+            return c.limit >= Int(limitRange.upperBound) ? "Charging to full" : "Charging to \(c.limit)%"
         case .holding:
             if s.percent > c.limit + 1 {
                 return "Not charging — \(s.percent)% is above the \(c.limit)% limit. Use it down; charging resumes at \(c.sailing ? c.sailFloor : c.limit - 1)%."
@@ -608,7 +610,9 @@ struct LimitStage: View {
             return c.sailing ? "Holding \(c.limit)%\(wall) · charges again at \(c.sailFloor)%" : "Holding at \(c.limit)%\(wall)"
         case .discharging: return "Above the limit — running on battery down to \(c.limit)%"
         case .heat: return String(format: "Paused — battery is %.0f°, waiting for it to cool", s.temperature ?? 0)
-        case .topUp: return "Topping up to max, then back to \(c.limit)%"
+        case .topUp:
+            if !b.onAC { return "Plug in to top up to max, then back to \(c.limit)%" }
+            return b.isCharging ? "Topping up to max, then back to \(c.limit)%" : "Waiting for charging to start, then topping up to max"
         case .lowSafety: return "Below 10% — charging normally"
         case .unsupported: return "Charge control isn't supported on this Mac"
         }

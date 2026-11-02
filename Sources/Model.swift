@@ -16,7 +16,7 @@ final class AppModel: ObservableObject {
     @Published var apps: [AppEnergy] = []
     @Published var expandedApp: String?
     @Published var lowPowerBusy = false
-    @Published var popoverShown = false
+    @Published var popoverShown = false { didSet { if popoverShown != oldValue { scheduleRefresh() } } }
     let energy = EnergyMonitor()
     let charge = ChargeControl()
     let ble = BLEBattery()
@@ -39,8 +39,7 @@ final class AppModel: ObservableObject {
         NotificationCenter.default.addObserver(forName: .NSProcessInfoPowerStateDidChange, object: nil, queue: .main) { [weak self] _ in
             self?.refresh()
         }
-        timer = Timer.scheduledTimer(withTimeInterval: 20, repeats: true) { [weak self] _ in self?.refresh() }
-        timer?.tolerance = 5
+        scheduleRefresh()
         // Перемикач відсотка: число й ліміт міняються одразу, а не за наступним оновленням
         percentMode = Settings.shared.$percentMode.dropFirst().receive(on: DispatchQueue.main).sink { [weak self] _ in self?.refresh() }
         // Іконка показує стан хелпера, тож малюємо її одразу, щойно він змінився
@@ -54,6 +53,14 @@ final class AppModel: ObservableObject {
         sampleEnergy()
         energyTimer = Timer.scheduledTimer(withTimeInterval: 120, repeats: true) { [weak self] _ in self?.sampleEnergy() }
         energyTimer?.tolerance = 20
+    }
+
+    /// Поки поповер відкритий, заряд, що щойно почався, видно за секунди; у фоні вистачає й рідше.
+    private func scheduleRefresh() {
+        timer?.invalidate()
+        timer = Timer.scheduledTimer(withTimeInterval: popoverShown ? 5 : 20, repeats: true) { [weak self] _ in self?.refresh() }
+        timer?.tolerance = popoverShown ? 1 : 5
+        if popoverShown { refresh() }
     }
 
     func sampleEnergy() {

@@ -117,7 +117,7 @@ var adapterOn = true
 var ledValue: UInt8 = 0
 var holding = false           // досягли ліміту й чекаємо, поки спуститься до limit − sailRange
 var draining = false          // розряджаємо до межі; вмикається з запасом, щоб округлення 72↔73 не смикало адаптер
-var holdUpper: Int?           // на якому значенні прошивки (її відсоток — як у macOS) зупинились, коли число дійшло до ліміту
+var hold = FirmwareHold()
 var heatSince: Date?
 var sleepAssertion: IOPMAssertionID = 0
 var lastLowPowerRequest: Date?
@@ -266,14 +266,12 @@ func tick() {
             // Прошивка рахує у відсотку macOS, тож переводимо за поточним співвідношенням
             let toFirmware = { (v: Int) in min(100, Int((Double(v) * Double(b.macPercent) / Double(max(1, shown))).rounded())) }
             // Поки заряджається, верхня межа трохи вище, а зупиняємо, щойно число дійшло до ліміту. Уві сні зупинить сама прошивка, на 1–2 % неточно
-            if b.isCharging && shown < cfg.limit { holdUpper = nil }
-            else if shown >= cfg.limit && !willDrain { holdUpper = b.macPercent }
-            if willDrain { holdUpper = nil }
-            let upper = holdUpper ?? min(100, toFirmware(cfg.limit) + (scale == .macOS ? 0 : 1))
+            hold.update(limit: cfg.limit, shown: shown, macPercent: b.macPercent, charging: b.isCharging, willDrain: willDrain)
+            let upper = hold.upper ?? min(100, toFirmware(cfg.limit) + (scale == .macOS ? 0 : 1))
             target = (min(toFirmware(lower), upper - 1), upper)
-            // Поки заряджається, округлення не варте перезапису ключів: зупинить перевірка вище
-            if holdUpper == nil, scale != .macOS, let cur = firmwareTarget, abs(cur.upper - upper) <= 1 { target = cur }
-        } else { holdUpper = nil }
+            // Поки заряджається, округлення не варте перезапису ключів: зупинить перевірка вище. Але межа не вище заряду заряд не пустить
+            if hold.upper == nil, scale != .macOS, let cur = firmwareTarget, abs(cur.upper - upper) <= 1, willDrain || cur.upper > b.macPercent { target = cur }
+        } else { hold.reset() }
 
         if heatSince != nil && b.onAC {
             st.mode = .heat
