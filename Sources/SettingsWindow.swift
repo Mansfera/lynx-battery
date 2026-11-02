@@ -120,7 +120,7 @@ struct GeneralSettings: View {
 
     var body: some View {
         let hasBattery = model.battery != nil
-        SettingsPane(height: hasBattery ? 372 : 214) {
+        SettingsPane(height: hasBattery ? 560 : 402) {
             Section {
                 Toggle("Open at login", isOn: $s.launchAtLogin)
                 if hasBattery {
@@ -145,6 +145,47 @@ struct GeneralSettings: View {
                 }
                 if hasBattery { Toggle("Animate while charging", isOn: $s.animateCharging) }
             } header: { SectionHead("Menu bar") }
+            Section {
+                AppIconPicker(selection: $s.appIcon)
+            } header: {
+                SectionHead("App icon")
+            } footer: {
+                if #available(macOS 26, *) {
+                    Text("Only \(AppIconVariant.standard.title) follows the Dark, Clear and Tinted icon styles.")
+                        .font(Brand.text(11)).foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+}
+
+/// Значки в ряд, щоб вибирати за виглядом, а не за назвою.
+private struct AppIconPicker: View {
+    @Binding var selection: AppIconVariant
+    @Environment(\.palette) private var pal
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(AppIconVariant.allCases) { variant in
+                let selected = variant == selection
+                Button { selection = variant } label: {
+                    VStack(spacing: 4) {
+                        if let image = variant.image {
+                            Image(nsImage: image).resizable().frame(width: 64, height: 64)
+                        }
+                        Text(variant.title).font(Brand.text(11, selected ? .semibold : .regular))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 6)
+                    .contentShape(Rectangle())
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 10).strokeBorder(pal.toggleTint, lineWidth: 1.5).opacity(selected ? 1 : 0)
+                    }
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(variant.title)
+                .accessibilityAddTraits(selected ? .isSelected : [])
+            }
         }
     }
 }
@@ -207,15 +248,25 @@ struct AboutSettings: View {
 
     private func info(_ key: String) -> String { Bundle.main.object(forInfoDictionaryKey: key) as? String ?? "" }
 
+    /// Підкреслення: у вторинному тексті самого кольору замало, щоб посилання читалось як посилання.
+    private func link(_ title: String, _ url: String) -> AttributedString {
+        var text = AttributedString(title)
+        text.link = URL(string: url)
+        text.underlineStyle = .single
+        return text
+    }
+
     var body: some View {
-        SettingsPane(height: 244) {
+        SettingsPane(height: 284) {
             Section {
                 HStack(spacing: 14) {
                     Image(nsImage: NSApp.applicationIconImage).resizable().frame(width: 56, height: 56)
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Lynx Battery").font(Brand.text(15, .semibold))
                         Text("Version \(info("CFBundleShortVersionString")) (\(info("CFBundleVersion")))").foregroundStyle(.secondary)
-                        Text(info("NSHumanReadableCopyright")).foregroundStyle(.secondary)
+                        Text("© 2026 Developed by \(link("Ihor Kharkholyuk", "https://kharkholy.uk"))").foregroundStyle(.secondary)
+                        Text("Designed by \(link("Etherlynx Studio", "https://www.instagram.com/etherlynx.ai/"))").foregroundStyle(.secondary)
+                        Text("Made with Claude").font(Brand.text(11)).foregroundStyle(.secondary).padding(.top, 2)
                     }
                 }
             }

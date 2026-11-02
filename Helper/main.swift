@@ -223,7 +223,7 @@ func tick() {
 
     // Що хочемо: stop — не заряджати; drain — ще й вимкнути адаптер, щоб спуститись до ліміту
     var stop = false, drain = false
-    let lower = cfg.sailing ? cfg.limit - cfg.sailRange : cfg.limit - 1
+    let lower = cfg.sailing ? cfg.sailFloor : cfg.limit - 1
     // Межа для прошивки; nil — вимкнена, тобто заряд іде як зазвичай (ліміт вимкнено, Top Up, ≤ 10 %)
     var target: (lower: Int, upper: Int)?
 

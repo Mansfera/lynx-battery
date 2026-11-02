@@ -33,7 +33,9 @@ swiftc Helper/main.swift Sources/SMC.swift Sources/Battery.swift Sources/ChargeC
     -framework IOKit -swift-version 5 -target arm64-apple-macos14.0 -O
 
 cp Info.plist "$APP/Contents/Info.plist"
-cp -R Resources/Fonts Resources/Marks Resources/AppIcon.icns "$APP/Contents/Resources/"
+cp -R Resources/Fonts Resources/Marks Resources/AppIcon.icns Resources/Assets.car "$APP/Contents/Resources/"
+mkdir -p "$APP/Contents/Resources/Icons"
+cp Resources/Icons/*.png "$APP/Contents/Resources/Icons/"
 codesign --force --deep --sign - "$APP" 2>/dev/null || true
 
 echo "✅ Done: $DIR/$APP"

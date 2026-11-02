@@ -26,6 +26,9 @@ enum ChargeScale: String, Codable {
     /// Найбільше значення в цьому відсотку: ліміт на цій позначці означає «заряджати до повного».
     func top(_ b: BatterySnapshot) -> Int { self == .ofDesign ? b.designTop : 100 }
 
+    /// Найнижчий ліміт: 15 % справжнього заряду. При ≤ 10 % хелпер заряджає завжди, тож ближчий ліміт ганяв би заряд туди й назад.
+    func lowest(_ b: BatterySnapshot) -> Int { min(top(b) - 1, ChargeScale.trueCharge.convert(15, to: self, b)) }
+
     /// Те саме фізичне значення заряду в іншому відсотку, щоб при зміні режиму ліміт не зсувався.
     func convert(_ value: Int, to other: ChargeScale, _ b: BatterySnapshot) -> Int {
         if self == other { return value }
@@ -44,7 +47,7 @@ enum ChargeScale: String, Codable {
 
 struct ChargeConfig: Codable, Equatable {
     var enabled = false
-    var limit = 80            // у відсотку scale; 30…100
+    var limit = 80            // у відсотку scale; 10…100, у повзунку не нижче ChargeScale.lowest
     /// Необов'язкове, бо в старому файлі налаштувань його немає; nil — справжній заряд, як раніше.
     var scale: ChargeScale?
     var sailing = true
@@ -59,10 +62,13 @@ struct ChargeConfig: Codable, Equatable {
     var lowPower = false
     var lowPowerRequestAt: Date?
 
+    /// Де Sailing знову вмикає заряд: не нижче межі безпеки хелпера, а в прошивку від'ємне число не піде.
+    var sailFloor: Int { max(10, limit - sailRange) }
+
     /// Хелпер працює від root і читає файл, який може правити користувач, — тож лише перевірені межі.
     func sanitized() -> ChargeConfig {
         var c = self
-        c.limit = min(100, max(30, c.limit))
+        c.limit = min(100, max(10, c.limit))
         c.sailRange = min(20, max(2, c.sailRange))
         c.heatMax = min(45, max(30, c.heatMax))
         return c

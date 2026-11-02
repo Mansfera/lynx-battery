@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 import CoreText
 
-/// Система etherlynx.xyz / volodymyr.buzz: білий фон, Ink, небесна сцена (sky), Onest, грифон.
+/// Система etherlynx.xyz / volodymyr.buzz: білий фон, Ink, небесна сцена (sky), Onest.
 /// Червоний — лише функціональний: мало заряду.
 enum Brand {
     static let ink = Color(hex: 0x0E0E10)
@@ -100,11 +100,10 @@ extension NSColor {
     }
 }
 
-/// Грифон Etherlynx із сайту (marks/griffin-*.svg).
-struct Griffin: View {
-    var light: Bool   // true — білий знак на темному
+/// Рись із комірок батареї (Marks/lynx-ink.svg), той самий рисунок, що й значок апки.
+struct LynxMark: View {
     var body: some View {
-        if let url = Bundle.main.url(forResource: light ? "griffin-paper" : "griffin-ink", withExtension: "svg", subdirectory: "Marks"),
+        if let url = Bundle.main.url(forResource: "lynx-ink", withExtension: "svg", subdirectory: "Marks"),
            let img = NSImage(contentsOf: url) {
             Image(nsImage: img).resizable().aspectRatio(contentMode: .fit)
         }

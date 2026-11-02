@@ -58,8 +58,17 @@ final class Settings: ObservableObject {
     @Published var glow: Bool { didSet { d.set(glow, forKey: "glow") } }
     @Published var sound: String { didSet { d.set(sound, forKey: "sound") } }
     @Published var iconStyle: IconStyle { didSet { d.set(iconStyle.rawValue, forKey: "icon") } }
+    @Published var appIcon: AppIconVariant {
+        didSet {
+            d.set(appIcon.rawValue, forKey: "appIcon")
+            if appIcon != oldValue { appIcon.apply() }
+        }
+    }
     @Published var smartColors: Bool { didSet { d.set(smartColors, forKey: "colors") } }
     @Published var percentMode: PercentMode { didSet { d.set(percentMode.rawValue, forKey: "percentMode") } }
+    /// Лише для режиму «Of original capacity»: задавати ліміт у справжньому заряді, 0–100 %.
+    @Published var limitTrueCharge: Bool { didSet { d.set(limitTrueCharge, forKey: "limitTrueCharge") } }
+    var limitScale: ChargeScale { percentMode == .ofDesign && limitTrueCharge ? .trueCharge : percentMode.chargeScale }
     @Published var animateCharging: Bool { didSet { d.set(animateCharging, forKey: "animate") } }
     @Published var persistent: Bool { didSet { d.set(persistent, forKey: "persistent") } }
     @Published var heatAlert: Bool { didSet { d.set(heatAlert, forKey: "heat") } }
@@ -103,8 +112,10 @@ final class Settings: ObservableObject {
         glow = d.bool(forKey: "glow")
         sound = d.string(forKey: "sound") ?? "Glass"
         iconStyle = IconStyle(rawValue: d.string(forKey: "icon") ?? "") ?? .inside
+        appIcon = AppIconVariant(rawValue: d.string(forKey: "appIcon") ?? "") ?? .standard
         smartColors = d.bool(forKey: "colors")
         percentMode = PercentMode(rawValue: d.string(forKey: "percentMode") ?? "") ?? .trueCharge
+        limitTrueCharge = d.bool(forKey: "limitTrueCharge")
         animateCharging = d.bool(forKey: "animate")
         persistent = d.bool(forKey: "persistent")
         heatAlert = d.bool(forKey: "heat")

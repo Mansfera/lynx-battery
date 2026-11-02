@@ -456,7 +456,7 @@ struct FullScreenAlertView: View {
             LinearGradient(colors: [Brand.skyTop, Brand.skyMid, Brand.skyLow], startPoint: .top, endPoint: .bottom)
             VStack(alignment: .leading, spacing: 0) {
                 HStack(spacing: 10) {
-                    Griffin(light: false).frame(width: 22, height: 22)
+                    LynxMark().frame(width: 22, height: 22)
                     Text("Lynx Battery").font(Brand.text(16, .semibold)).foregroundStyle(Brand.ink)
                 }
                 .padding(.top, 48)

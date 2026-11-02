@@ -434,6 +434,7 @@ struct LowPowerRow: View {
 
 struct ChargeTab: View {
     @ObservedObject var control: ChargeControl
+    @ObservedObject private var settings = Settings.shared
     let b: BatterySnapshot
     @Environment(\.palette) private var pal
 
@@ -458,7 +459,11 @@ struct ChargeTab: View {
                 LimitStage(control: control, b: b)
                 Panel {
                     VStack(alignment: .leading, spacing: 10) {
-                        Toggle2("Sailing mode", detail: "Charge again only below \(control.config.limit - control.config.sailRange)%, not every time it dips under the limit.",
+                        if settings.percentMode == .ofDesign {
+                            Toggle2("Limit in true charge", detail: trueChargeDetail, isOn: $settings.limitTrueCharge) { EmptyView() }
+                            Divider().overlay(pal.line)
+                        }
+                        Toggle2("Sailing mode", detail: "Charge again only below \(control.config.sailFloor)%, not every time it dips under the limit.",
                                 isOn: $control.config.sailing) {
                             Stepper2(value: $control.config.sailRange, range: 2...20, step: 1, suffix: "%")
                         }
@@ -502,6 +507,12 @@ struct ChargeTab: View {
         }
         .onAppear { control.readStatus() }
     }
+
+    private var trueChargeDetail: String {
+        guard settings.limitTrueCharge else { return "Set the limit from 0 to 100% of what the battery holds now, not of its original capacity." }
+        let original = ChargeScale.trueCharge.convert(control.config.limit, to: .ofDesign, b)
+        return "The menu bar counts original capacity, so \(control.config.limit)% here shows there as \(original)%."
+    }
 }
 
 struct InstallStage: View {
@@ -528,6 +539,7 @@ struct InstallStage: View {
 
 struct LimitStage: View {
     @ObservedObject var control: ChargeControl
+    @ObservedObject private var settings = Settings.shared
     let b: BatterySnapshot
     @Environment(\.palette) private var pal
 
@@ -536,7 +548,8 @@ struct LimitStage: View {
             VStack(alignment: .leading, spacing: 12) {
                 HStack(alignment: .firstTextBaseline) {
                     VStack(alignment: .leading, spacing: 0) {
-                        Text("Limit").font(Brand.text(11, .medium)).foregroundStyle(pal.fg.opacity(0.6))
+                        Text(settings.percentMode == .ofDesign && settings.limitTrueCharge ? "Limit · true charge" : "Limit")
+                            .font(Brand.text(11, .medium)).foregroundStyle(pal.fg.opacity(0.6))
                         HStack(alignment: .firstTextBaseline, spacing: 2) {
                             Text("\(control.config.limit)").font(Brand.display(64)).tracking(-3).monospacedDigit()
                                 .contentTransition(.numericText())
@@ -546,11 +559,20 @@ struct LimitStage: View {
                     Spacer()
                     Toggle("", isOn: $control.config.enabled).labelsHidden().toggleStyle(.switch).tint(pal.toggleTint)
                 }
-                Slider(value: Binding(get: { Double(control.config.limit) },
-                                      set: { control.config.limit = Int($0.rounded()) }),
-                       in: limitRange)
-                    .tint(pal.fg)
-                    .disabled(!control.config.enabled)
+                VStack(spacing: 2) {
+                    // Шкала завжди від 0, але повзунок зупиняється на lowest
+                    Slider(value: Binding(get: { Double(control.config.limit) },
+                                          set: { control.config.limit = max(lowest, Int($0.rounded())) }),
+                           in: limitRange)
+                        .tint(pal.fg)
+                        .disabled(!control.config.enabled)
+                    LimitMarkers(top: Int(limitRange.upperBound))
+                }
+                if control.config.enabled && control.config.limit <= lowest {
+                    Text("\(lowest)% is the lowest limit, because the Mac always charges below 10%.")
+                        .font(Brand.text(10.5)).foregroundStyle(pal.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 Text(stateLine).font(Brand.text(12.5, .medium))
                     .foregroundStyle(control.status?.mode == .heat || control.status?.mode == .unsupported ? Brand.signal : pal.fg.opacity(0.75))
                     .fixedSize(horizontal: false, vertical: true)
@@ -565,13 +587,9 @@ struct LimitStage: View {
         .opacity(control.config.enabled ? 1 : 0.85)
     }
 
-    /// Межі повзунка у відсотку, який бачить користувач: нижня — 50 % справжнього заряду, верхня — повний заряд у цьому режимі.
-    private var limitRange: ClosedRange<Double> {
-        let scale = control.config.scale ?? .trueCharge
-        let top = scale == .ofDesign ? b.designTop : 100
-        let low = scale == .ofDesign ? 50 * b.designTop / 100 : 50
-        return Double(min(low, top - 1))...Double(top)
-    }
+    private var scale: ChargeScale { control.config.scale ?? .trueCharge }
+    private var limitRange: ClosedRange<Double> { 0...Double(scale.top(b)) }
+    private var lowest: Int { scale.lowest(b) }
 
     private var stateLine: String {
         guard control.helperAlive, let s = control.status else {
@@ -584,16 +602,42 @@ struct LimitStage: View {
         case .charging: return c.limit >= Int(limitRange.upperBound) ? "Charging to full" : "Charging to \(c.limit)%"
         case .holding:
             if s.percent > c.limit + 1 {
-                return "Not charging — \(s.percent)% is above the \(c.limit)% limit. Use it down; charging resumes at \(c.sailing ? c.limit - c.sailRange : c.limit - 1)%."
+                return "Not charging — \(s.percent)% is above the \(c.limit)% limit. Use it down; charging resumes at \(c.sailing ? c.sailFloor : c.limit - 1)%."
             }
             let wall = s.wallHold == true ? " on wall power" : ""
-            return c.sailing ? "Holding \(c.limit)%\(wall) · charges again at \(c.limit - c.sailRange)%" : "Holding at \(c.limit)%\(wall)"
+            return c.sailing ? "Holding \(c.limit)%\(wall) · charges again at \(c.sailFloor)%" : "Holding at \(c.limit)%\(wall)"
         case .discharging: return "Above the limit — running on battery down to \(c.limit)%"
         case .heat: return String(format: "Paused — battery is %.0f°, waiting for it to cool", s.temperature ?? 0)
         case .topUp: return "Topping up to max, then back to \(c.limit)%"
         case .lowSafety: return "Below 10% — charging normally"
         case .unsupported: return "Charge control isn't supported on this Mac"
         }
+    }
+}
+
+/// Позначки під повзунком: 0, кожні 25 % і максимум, який у режимі оригінальної ємності дорівнює здоров'ю батареї.
+struct LimitMarkers: View {
+    let top: Int
+    @Environment(\.palette) private var pal
+    /// Половина бігунка: доріжка повзунка коротша за його ширину саме на стільки з кожного боку
+    private let inset: CGFloat = 10
+
+    private var values: [Int] { stride(from: 0, to: top - 8, by: 25).map { $0 } + [top] }
+
+    var body: some View {
+        GeometryReader { geo in
+            ForEach(values, id: \.self) { value in
+                VStack(spacing: 2) {
+                    Rectangle().fill(pal.fg.opacity(0.35)).frame(width: 1, height: 4)
+                    Text(value == top ? "\(top)%" : "\(value)")
+                        .font(Brand.mono(9.5, .medium)).foregroundStyle(pal.fg.opacity(0.6))
+                        .fixedSize()
+                }
+                .position(x: inset + (geo.size.width - 2 * inset) * CGFloat(value) / CGFloat(max(1, top)), y: 9)
+            }
+        }
+        .frame(height: 18)
+        .accessibilityHidden(true)
     }
 }
 

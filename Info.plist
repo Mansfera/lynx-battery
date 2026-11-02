@@ -8,6 +8,8 @@
 	<string>LynxBattery</string>
 	<key>CFBundleIconFile</key>
 	<string>AppIcon</string>
+	<key>CFBundleIconName</key>
+	<string>AppIcon</string>
 	<key>CFBundleIdentifier</key>
 	<string>xyz.etherlynx.battery</string>
 	<key>CFBundleName</key>
@@ -27,6 +29,6 @@
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSHumanReadableCopyright</key>
-	<string>© 2026 Etherlynx Studio</string>
+	<string>© 2026 Ihor Kharkholyuk. Designed by Etherlynx Studio.</string>
 </dict>
 </plist>

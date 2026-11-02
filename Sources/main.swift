@@ -18,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, Set
     func applicationDidFinishLaunching(_ n: Notification) {
         Brand.registerFonts()
         AppMenu.installMainMenu()
+        Settings.shared.appIcon.applyOnLaunch()
         item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         item.button?.target = self
         item.button?.action = #selector(toggle)
