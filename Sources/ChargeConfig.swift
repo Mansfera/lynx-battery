@@ -63,7 +63,7 @@ struct ChargeConfig: Codable, Equatable {
     var heatProtection = true
     var heatMax = 35.0        // °C, як радить AlDente з посиланням на Apple
     var sleepUntilLimit = false
-    var magsafeLED = false
+    var magsafeLED = true
     var discharge = true      // автоматично розряджати до ліміту, якщо заряд вищий
     var topUp = false         // один раз до повного, потім назад до ліміту
     /// Запит на режим енергозбереження (ПКМ по іконці): хелпер застосовує pmset без пароля.
@@ -81,6 +81,22 @@ struct ChargeConfig: Codable, Equatable {
         c.heatMax = min(45, max(30, c.heatMax))
         return c
     }
+}
+
+/// На якому значенні прошивки (її відсоток — як у macOS) зупинились, коли число дійшло до ліміту.
+/// Діє лише для цього ліміту: якби вона пережила підняття ліміту, прошивка так і не почала б заряджати.
+struct FirmwareHold {
+    private(set) var upper: Int?
+    private var limit: Int?
+
+    mutating func update(limit newLimit: Int, shown: Int, macPercent: Int, charging: Bool, willDrain: Bool) {
+        if newLimit != limit { upper = nil }
+        limit = newLimit
+        if willDrain || (charging && shown < newLimit) { upper = nil }
+        else if shown >= newLimit { upper = macPercent }
+    }
+
+    mutating func reset() { upper = nil }
 }
 
 struct ChargeStatus: Codable, Equatable {

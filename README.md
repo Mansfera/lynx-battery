@@ -92,6 +92,7 @@ Plain `swiftc`, no Xcode project. `build.sh` compiles the app (`Sources/`) and t
 ```sh
 Tests/high-alerts.sh    # alert thresholds in every percent mode
 Tests/charge-limit.sh   # limit bounds and scale conversion
+Tests/charge-start.sh   # charging starts after a limit change, live charge state
 Tests/desktop-mode.sh   # Macs without a battery, renders each screen to PNG
 ```
 

@@ -87,6 +87,13 @@ final class SMC {
         }
     }
 
+    /// Струм заряду просто зараз, мА (CHBI, ui32 у little-endian), читається без root.
+    /// Перевірено лише на прошивках із межею (bfF0): на інших сенс ключа не підтверджений, тож там nil.
+    func chargeCurrent() -> Int? {
+        guard info("bfF0") != nil, let b = readBytes("CHBI"), b.count == 4 else { return nil }
+        return Int(b[0]) | Int(b[1]) << 8 | Int(b[2]) << 16 | Int(b[3]) << 24
+    }
+
     /// Температура батареї, °C — середнє з датчиків, що відповідають.
     func batteryTemperature() -> Double? {
         let vals = ["TB0T", "TB1T", "TB2T"].compactMap { read($0) }.filter { $0 > 0 && $0 < 90 }
