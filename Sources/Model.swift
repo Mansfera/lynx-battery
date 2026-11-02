@@ -15,6 +15,9 @@ final class AppModel: ObservableObject {
     @Published var tab: Tab = .overview { didSet { startBluetoothOnDevicesTab() } }
     @Published var apps: [AppEnergy] = []
     @Published var expandedApp: String?
+    /// Куди йде потужність усього Mac; міряємо лише поки цю розбивку видно.
+    @Published var breakdown: PowerBreakdown?
+    var breakdownOnScreen = false { didSet { scheduleBreakdown() } }
     @Published var lowPowerBusy = false
     @Published var popoverShown = false { didSet { if popoverShown != oldValue { scheduleSampling(); if popoverShown { refresh() }; startBluetoothOnDevicesTab() } } }
     let energy = EnergyMonitor()
@@ -23,6 +26,8 @@ final class AppModel: ObservableObject {
     private var classicDevices: [BTDevice] = []
     private var energyTimer: Timer?
     private var powerTimer: Timer?
+    private var breakdownTimer: Timer?
+    private let breakdownMonitor = PowerBreakdownMonitor()
 
     let history = HistoryStore()
     let alerts = AlertEngine()
@@ -95,6 +100,26 @@ final class AppModel: ObservableObject {
             timer?.tolerance = refreshInterval / 4
         }
         if let t = powerTimer, t.timeInterval != powerInterval { t.invalidate(); startPowerTimer() }
+        scheduleBreakdown()
+    }
+
+    private func scheduleBreakdown() {
+        let wanted = breakdownOnScreen && popoverShown && !Settings.shared.minimalEnergy
+        guard wanted != (breakdownTimer != nil) else { return }
+        breakdownTimer?.invalidate(); breakdownTimer = nil
+        guard wanted else { return }
+        // Старих чисел під виглядом живих не лишаємо: проміжок починається заново
+        breakdown = nil
+        breakdownMonitor.reset()
+        tickBreakdown()
+        breakdownTimer = Timer.scheduledTimer(withTimeInterval: PowerBreakdownMonitor.tickInterval, repeats: true) { [weak self] _ in self?.tickBreakdown() }
+    }
+
+    private func tickBreakdown() {
+        breakdownMonitor.tick { [weak self] b in
+            guard let self, self.breakdownTimer != nil else { return }
+            self.breakdown = b
+        }
     }
 
     private func startPowerTimer() {
