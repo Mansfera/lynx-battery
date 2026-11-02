@@ -264,8 +264,8 @@ struct AboutSettings: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text("Lynx Battery").font(Brand.text(15, .semibold))
                         Text("Version \(info("CFBundleShortVersionString")) (\(info("CFBundleVersion")))").foregroundStyle(.secondary)
-                        Text("© 2026 Developed by \(link("Ihor Kharkholyuk", "https://kharkholy.uk"))").foregroundStyle(.secondary)
-                        Text("Designed by \(link("Etherlynx Studio", "https://www.instagram.com/etherlynx.ai/"))").foregroundStyle(.secondary)
+                        Text("© 2026 Designed & developed by \(link("Etherlynx Studio", "https://etherlynx.xyz/")) & \(link("Ihor Kharkholyuk", "https://kharkholy.uk"))")
+                            .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                         Text("Made with Claude").font(Brand.text(11)).foregroundStyle(.secondary).padding(.top, 2)
                     }
                 }
