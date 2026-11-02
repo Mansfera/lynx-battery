@@ -1009,8 +1009,16 @@ struct Sankey: View, Animatable {
                    with: .linearGradient(Gradient(colors: [.clear, pal.fg.opacity(0.07), .clear]),
                                          startPoint: CGPoint(x: x, y: 0), endPoint: CGPoint(x: x + 50, y: 0)))
         }
-        for r in Array(L.left.values) + Array(L.right.values) {
-            ctx.fill(Path(roundedRect: r, cornerRadius: 18, style: .continuous), with: .color(fill))
+        // Кути до стрічок — прямі, щоб вузол і стрічка читалися однією формою. Радіус — не більше половини висоти низького вузла.
+        for r in L.left.values {
+            let c = min(18, r.height / 2)
+            let radii = RectangleCornerRadii(topLeading: c, bottomLeading: c, bottomTrailing: 0, topTrailing: 0)
+            ctx.fill(UnevenRoundedRectangle(cornerRadii: radii, style: .continuous).path(in: r), with: .color(fill))
+        }
+        for r in L.right.values {
+            let c = min(18, r.height / 2)
+            let radii = RectangleCornerRadii(topLeading: 0, bottomLeading: 0, bottomTrailing: c, topTrailing: c)
+            ctx.fill(UnevenRoundedRectangle(cornerRadii: radii, style: .continuous).path(in: r), with: .color(fill))
         }
     }
 
