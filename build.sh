@@ -9,8 +9,6 @@ echo "Building $APP ..."
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 
-# Перевірка режиму Mac без батареї на MacBook: SIMULATE_NO_BATTERY=1 ./build.sh
-# (=no-watts — ще й без ключа потужності). Прапорець компіляції: у звичайній збірці цього коду немає.
 SIM=()
 case "${SIMULATE_NO_BATTERY:-}" in
     "") ;;
@@ -18,7 +16,6 @@ case "${SIMULATE_NO_BATTERY:-}" in
     *) SIM=(-D SIMULATE_NO_BATTERY) ;;
 esac
 
-# swift-version 5 — без суворої Swift 6 concurrency
 swiftc Sources/*.swift ${SIM[@]+"${SIM[@]}"} \
     -o "$APP/Contents/MacOS/LynxBattery" \
     -framework Cocoa -framework IOKit -framework SwiftUI -framework ServiceManagement -framework CoreBluetooth \
@@ -26,7 +23,6 @@ swiftc Sources/*.swift ${SIM[@]+"${SIM[@]}"} \
     -target arm64-apple-macos14.0 \
     -O
 
-# Root-хелпер ліміту заряду: ставиться в систему лише з налаштувань апки, з паролем адміністратора
 mkdir -p "$APP/Contents/Library/LaunchServices"
 swiftc Helper/main.swift Sources/SMC.swift Sources/Battery.swift Sources/ChargeConfig.swift \
     -o "$APP/Contents/Library/LaunchServices/com.mansfera.lynxbattery.helper" \
