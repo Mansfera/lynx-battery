@@ -33,8 +33,11 @@ struct BatterySnapshot: Equatable {
     /// Підключено, але батарея сідає. Причин багато: щойно підключили, заряд тримає ліміт або сама macOS.
     var drainingOnAC: Bool { onAC && !isCharging && watts < -1.5 }
 
-    /// Зарядка справді не тягне: Mac споживає майже все, що дає адаптер. Потужність невідома — вважаємо, що так.
-    var chargerTooWeak: Bool { drainingOnAC && adapterWatts.map { systemWatts >= Double($0) * 0.8 } ?? true }
+    /// Зарядка не тягне: Mac споживає майже все, що дає адаптер. Потужність невідома — вважаємо, що так.
+    var underpowered: Bool { drainingOnAC && adapterWatts.map { systemWatts >= Double($0) * 0.8 } ?? true }
+
+    /// underpowered, що протрималось довше, ніж адаптер домовляється про потужність. Ставить апка (WeakChargerTracker).
+    var chargerTooWeak = false
 
     /// Куди йде живлення. На адаптері все рахуємо від входу: Mac отримує те, що лишилося після батареї
     /// (разом із втратами зарядки всередині Mac), тож потоки завжди дорівнюють входу, а не трьом окремим замірам.
@@ -126,6 +129,20 @@ struct HighAlertTracker {
     /// Поріг вище стелі досягається лише на повній батареї, тож і заголовок той самий, що для 100.
     static func title(_ threshold: Int, _ b: BatterySnapshot) -> String {
         threshold >= 100 || threshold > b.percentTop ? "Fully charged" : "Charged to \(b.percent)%"
+    }
+}
+
+/// USB-C PD блок після підключення домовляється про потужність сходинками (5 → 15 → повна) кілька секунд,
+/// а macOS ще трохи оновлює AdapterDetails: слабким вважаємо лише той, що не тягне довше за settle.
+struct WeakChargerTracker {
+    static let settle: TimeInterval = 30
+    private(set) var since: Date?
+
+    mutating func update(_ b: BatterySnapshot, now: Date = Date()) -> Bool {
+        guard b.underpowered else { since = nil; return false }
+        let start = since ?? now
+        since = start
+        return now.timeIntervalSince(start) >= Self.settle
     }
 }
 

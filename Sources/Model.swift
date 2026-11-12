@@ -184,7 +184,7 @@ final class AppModel: ObservableObject {
         b.percentTop = Settings.shared.percentMode.chargeScale.top(b)
         b.percent = Settings.shared.percentMode.pick(b)
         alerts.evaluate(b)
-        alerts.evaluateCharger(b)
+        alerts.evaluateCharger(&b)
         history.record(b)
         historyTick += 1
         battery = b

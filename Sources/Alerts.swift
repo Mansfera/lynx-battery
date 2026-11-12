@@ -115,7 +115,9 @@ final class AlertEngine {
     }
 
     private var firedWeak = false
-    func evaluateCharger(_ b: BatterySnapshot) {
+    private var weakCharger = WeakChargerTracker()
+    func evaluateCharger(_ b: inout BatterySnapshot) {
+        b.chargerTooWeak = weakCharger.update(b)
         if b.chargerTooWeak, !firedWeak {
             firedWeak = true
             presenter.show(AlertSpec(title: "Charger can't keep up",

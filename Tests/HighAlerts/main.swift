@@ -110,5 +110,34 @@ check("status: charging to design top is full", charging(70, top: 88, minutes: 3
 check("status: at the limit still charging", charging(80, top: 100, minutes: 20).statusLine(target: 80),
       "Charging · 67 W · 20 min to full")
 
+// Слабкий адаптер: PD домовляється сходинками, тож перші заміри після підключення ще не вирок
+func draining(adapter: Int?, system: Double = 30, ac: Bool = true) -> BatterySnapshot {
+    BatterySnapshot(percent: 50, isCharging: false, onAC: ac, fullyCharged: false, minutes: nil, watts: -8,
+                    adapterWatts: adapter, cycles: 0, designCycles: 1000, designCapacity: 1000, fullCapacity: 880,
+                    temperature: nil, systemWatts: system, inputWatts: 0, lowPower: false)
+}
+do {
+    let t0 = Date()
+    func at(_ s: TimeInterval) -> Date { t0.addingTimeInterval(s) }
+    var w = WeakChargerTracker()
+    check("weak: a 5 W first step isn't weak yet", w.update(draining(adapter: 5), now: at(0)), false)
+    check("weak: a 15 W step a moment later isn't either", w.update(draining(adapter: 15), now: at(3)), false)
+    check("weak: the full 96 W clears it", w.update(draining(adapter: 96), now: at(6)), false)
+    check("weak: and the timer is gone", w.since == nil, true)
+    check("weak: still fine long after", w.update(draining(adapter: 96), now: at(60)), false)
+
+    var slow = WeakChargerTracker()
+    check("weak: unknown watts on plug-in waits", slow.update(draining(adapter: nil), now: at(0)), false)
+    check("weak: still waiting before the settle time", slow.update(draining(adapter: 30), now: at(WeakChargerTracker.settle - 1)), false)
+    check("weak: a charger that stays weak is weak", slow.update(draining(adapter: 30), now: at(WeakChargerTracker.settle)), true)
+    check("weak: and stays weak", slow.update(draining(adapter: 30), now: at(90)), true)
+    check("weak: unplugging resets it", slow.update(draining(adapter: nil, ac: false), now: at(91)), false)
+    check("weak: replugging waits again", slow.update(draining(adapter: 30), now: at(92)), false)
+}
+check("status: a settling charger isn't called weak", draining(adapter: 5).statusLine, "Plugged in, using battery")
+var settled = draining(adapter: 30)
+settled.chargerTooWeak = true
+check("status: a settled weak charger is", settled.statusLine, "Plugged in, still draining")
+
 print(failures == 0 ? "All passed" : "\(failures) failed")
 exit(failures == 0 ? 0 : 1)
