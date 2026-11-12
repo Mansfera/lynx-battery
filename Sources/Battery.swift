@@ -26,6 +26,8 @@ struct BatterySnapshot: Equatable {
     var designTop: Int = 100
     /// Стеля числа percent у вибраному режимі: його ставить апка разом із percent. У сирому знімку хелпера лишається 100.
     var percentTop: Int = 100
+    /// AppleRawMaxCapacity: скільки мА·год батарея вміщає зараз. Від неї і здоров'я, і заряд, тож відсоток сходиться з мА·год.
+    var usableCapacity: Int = 0
 
     /// Поріг вище стелі число не досягне ніколи, тож для нього «досягнуто» означає справді повну батарею.
     func reachedHigh(_ threshold: Int) -> Bool { threshold > percentTop ? fullyCharged : percent >= threshold }
@@ -59,9 +61,12 @@ struct BatterySnapshot: Equatable {
 
     var needsService: Bool { health > 0 && (health < 80 || cycles >= designCycles) }
 
+    /// Ємність, від якої рахуємо здоров'я: те, що батарея вміщає зараз, а без неї — номінальна.
+    var healthCapacity: Int { usableCapacity > 0 ? usableCapacity : fullCapacity }
+
     var health: Int {
         guard designCapacity > 0 else { return 0 }
-        return min(100, Int((Double(fullCapacity) / Double(designCapacity) * 100).rounded()))
+        return min(100, Int((Double(healthCapacity) / Double(designCapacity) * 100).rounded()))
     }
 
     /// target — куди заряджаємось: ліміт або стеля режиму. До повного — лише час; до ліміту — час до нього й до повного.
@@ -195,13 +200,13 @@ enum BatteryReader {
         }
         if flag("FullyCharged") { percent = 100 }
         let macPercent = max > 0 ? Int((Double(cur) / Double(max) * 100).rounded()) : cur
-        // Здоров'я рахуємо від NominalChargeCapacity, а заряд — від меншої робочої ємності (AppleRawMaxCapacity).
-        // Ділити залишок на DesignCapacity не можна: повна батарея не дійшла б до свого ж Health (85 проти 88).
+        // Здоров'я і заряд рахуємо від тієї ж робочої ємності (AppleRawMaxCapacity), тож повна батарея дає рівно своє Health
         let fullCapacity = num("NominalChargeCapacity") ?? num("AppleRawMaxCapacity") ?? 0
+        let usable = num("AppleRawMaxCapacity") ?? fullCapacity
         var designPercent = percent
         var designTop = 100
-        if let design = num("DesignCapacity"), design > 0, fullCapacity > 0 {
-            let worn = Swift.min(1, Double(fullCapacity) / Double(design))
+        if let design = num("DesignCapacity"), design > 0, usable > 0 {
+            let worn = Swift.min(1, Double(usable) / Double(design))
             designPercent = Int((Double(Swift.min(100, percent)) * worn).rounded())
             designTop = Int((worn * 100).rounded())
         }
@@ -255,7 +260,8 @@ enum BatteryReader {
             lowPower: ProcessInfo.processInfo.isLowPowerModeEnabled,
             macPercent: macPercent,
             designPercent: designPercent,
-            designTop: designTop
+            designTop: designTop,
+            usableCapacity: num("AppleRawMaxCapacity") ?? full.map { Int($0) } ?? 0
         )
     }
 

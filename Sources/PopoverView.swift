@@ -276,8 +276,7 @@ struct StatsRow: View {
         Panel(padding: 0) {
             VStack(spacing: 0) {
                 HStack(spacing: 0) {
-                    Stat(value: "\(b.health)%", caption: "Health · \(b.fullCapacity) of \(b.designCapacity) mAh",
-                         alert: b.health < 80)
+                    Stat(value: "\(b.health)%", caption: healthNote, alert: b.health < 80)
                     Divider().overlay(pal.line)
                     Stat(value: "\(b.cycles)", caption: "Cycles · Apple rates it for \(b.designCycles)", alert: false)
                 }
@@ -293,6 +292,8 @@ struct StatsRow: View {
             }
         }
     }
+
+    private var healthNote: String { "Health · \(b.healthCapacity) of \(b.designCapacity) mAh" }
 
     private var tempNote: String {
         guard let t = b.temperature else { return "Temperature · no sensor" }

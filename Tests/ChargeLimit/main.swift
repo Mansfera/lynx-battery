@@ -154,5 +154,18 @@ check("raise: lowering the limit again cancels it", lr.active, false)
 lr.update(limit: 90, shown: 95)
 check("raise: raising to below the charge does nothing", lr.active, false)
 
+// Здоров'я — те, що батарея вміщає зараз, від нової: 3911 з 4563 → 86, як в AlDente
+var worn = snap(80, health: 88)
+worn.fullCapacity = 4038; worn.designCapacity = 4563
+check("health: without the current capacity it's nominal of design", worn.health, 88)
+worn.usableCapacity = 3911
+check("health: current capacity of design", worn.health, 86)
+check("health: caption numbers are the ones divided", worn.healthCapacity, 3911)
+var fresh = snap(80, health: 100)
+fresh.fullCapacity = 4654; fresh.designCapacity = 4629; fresh.usableCapacity = 4527
+check("health: nominal above design no longer hides wear", fresh.health, 98)
+fresh.usableCapacity = 4700
+check("health: current capacity above design caps at 100", fresh.health, 100)
+
 print(failures == 0 ? "All passed" : "\(failures) failed")
 exit(failures == 0 ? 0 : 1)
