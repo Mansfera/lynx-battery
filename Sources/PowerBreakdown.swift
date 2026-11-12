@@ -6,14 +6,14 @@ import SystemConfiguration
 
 struct PowerPart: Identifiable {
     var name: String
-    var watts: Double?                 // nil — ця частина є, але свою потужність не повідомляє
+    var watts: Double?                 // nil — this part exists but doesn't report its own power
     var detail: String?
     var estimated = false
-    var inside: [PowerActivity] = []   // що всередині цієї частини, але без власних ватт
+    var inside: [PowerActivity] = []   // what's inside this part, but without its own watts
     var id: String { name }
 }
 
-/// Датчика потужності немає, тож показуємо, чи ця частина зараз працює. Ватти не вигадуємо: навантаження SSD і Wi-Fi на M3 не дало окремої лінії серед ключів SMC.
+/// There's no power sensor, so we show whether this part is active right now. We don't make up watts: loading the SSD and Wi-Fi on an M3 didn't produce a separate line among the SMC keys.
 struct PowerActivity: Identifiable, Equatable {
     var name: String
     var value: String
@@ -26,16 +26,16 @@ struct PowerActivity: Identifiable, Equatable {
     }
 }
 
-/// Що зараз із вбудованим екраном. Зовнішній монітор живиться сам, тож у потужності Mac його панелі немає.
+/// What's going on with the built-in display. An external monitor powers itself, so its panel isn't in the Mac's power.
 struct DisplayState {
     var builtInOn: Bool
     var externalOn: Bool
     var brightness: Double?
-    var backlightEstimate: Double?     // оцінка за яскравістю: прямого датчика немає
+    var backlightEstimate: Double?     // estimate from brightness: there's no direct sensor
 
-    /// PBLR та IBLR дають 0 при ввімкненому екрані, тож підсвітку міряємо заміром, а не датчиком: крива Вт = maxWatts · яскравість^exponent.
-    /// Mac15,12 (MacBook Air M3): яскравість 10/50/100% при сталому навантаженні, PSTR мінус чип — 3,1 / 4,8 / 7,7 Вт.
-    /// Для інших моделей замірів немає: панель інша, тож краще без числа, ніж із чужим.
+    /// PBLR and IBLR read 0 with the display on, so the backlight is measured empirically, not by a sensor: curve W = maxWatts · brightness^exponent.
+    /// Mac15,12 (MacBook Air M3): brightness 10/50/100% under steady load, PSTR minus chip — 3.1 / 4.8 / 7.7 W.
+    /// No measurements for other models: the panel is different, so better no number than someone else's.
     private static let backlightCurves: [String: (maxWatts: Double, exponent: Double)] = ["Mac15,12": (4.85, 1.35)]
 
     static func estimateBacklight(brightness: Double, model: String) -> Double? {
@@ -43,17 +43,17 @@ struct DisplayState {
     }
 }
 
-/// Куди йде потужність усього Mac. Це ватти всієї машини, а не Energy Impact процесів: розділити CPU чи GPU між апками без root не можна.
+/// Where the whole Mac's power goes. These are whole-machine watts, not process Energy Impact: CPU or GPU can't be split between apps without root.
 struct PowerBreakdown {
     var total: Double
     var parts: [PowerPart]
 
-    /// channels — ватти каналів «Energy Model»; total — PSTR за той самий проміжок, nil якщо цей Mac його не повідомляє.
+    /// channels — watts of the "Energy Model" channels; total — PSTR over the same interval, nil if this Mac doesn't report it.
     static func make(channels: [String: Double], total: Double?, display: DisplayState, activity: [PowerActivity] = []) -> PowerBreakdown {
         func sum(_ matches: (String) -> Bool) -> Double { channels.reduce(0) { matches($1.key) ? $0 + $1.value : $0 } }
         func prefixed(_ names: String...) -> Double { sum { key in names.contains { key.hasPrefix($0) } } }
 
-        // Назви каналів відрізняються між чипами: «CPU Energy» на M3, «DIE_0_CPU Energy» на Ultra, «ANE0» на Max
+        // Channel names differ between chips: "CPU Energy" on M3, "DIE_0_CPU Energy" on Ultra, "ANE0" on Max
         let engine = prefixed("DISP")
         var parts = [
             displayPart(display, engine: engine),
@@ -66,7 +66,7 @@ struct PowerBreakdown {
         ]
 
         let known = parts.reduce(0) { $0 + ($1.watts ?? 0) }
-        // Вимірювачі оновлюються не синхронно: на короткому проміжку сума частин буває трохи більшою за PSTR
+        // The meters don't update in sync: over a short interval the sum of the parts can be slightly larger than PSTR
         let whole = max(total ?? known, known)
         parts.append(PowerPart(name: "Everything else", watts: total == nil ? nil : whole - known,
                                detail: display.builtInOn && display.backlightEstimate == nil ? "Includes backlight" : "No sensors",
@@ -74,7 +74,7 @@ struct PowerBreakdown {
         return PowerBreakdown(total: whole, parts: parts)
     }
 
-    /// Найбільші зверху, за тим числом, що на екрані: рівні за показаним числом не міняються місцями від дрібних стрибків.
+    /// Largest on top, by the number shown on screen: items equal by the shown number don't swap places on small jitters.
     var sortedByUsage: PowerBreakdown {
         func shown(_ part: PowerPart) -> Double { part.watts.map { ($0 * 10).rounded() } ?? -1 }
         var out = self
@@ -85,7 +85,7 @@ struct PowerBreakdown {
         return out
     }
 
-    /// Без кривої для цієї моделі ватти екрана потрапляють у «Everything else».
+    /// Without a curve for this model, display watts go into "Everything else".
     private static func displayPart(_ d: DisplayState, engine: Double) -> PowerPart {
         if d.builtInOn {
             return PowerPart(name: "Display", watts: d.backlightEstimate.map { $0 + engine },
@@ -94,7 +94,7 @@ struct PowerBreakdown {
         return PowerPart(name: "Display", watts: engine, detail: d.externalOn ? "External, own power" : "Off")
     }
 
-    /// Показники стрибають щосекунди: згладжуємо, щоб числа встигали прочитати.
+    /// The readings jump every second: smooth them so the numbers can be read.
     func smoothed(after old: PowerBreakdown?) -> PowerBreakdown {
         guard let old else { return self }
         var out = self
@@ -108,7 +108,7 @@ struct PowerBreakdown {
     }
 }
 
-/// Лічильники енергії чипа. IOReport — приватна бібліотека, тож вантажимо її під час роботи: якщо її немає, просто немає розбивки.
+/// Chip energy counters. IOReport is a private library, so we load it at runtime: if it's missing, there's simply no breakdown.
 private final class EnergyCounters {
     private typealias CopyChannels = @convention(c) (CFString, CFString?, UInt64, UInt64, UInt64) -> Unmanaged<CFDictionary>?
     private typealias CreateSubscription = @convention(c) (UnsafeRawPointer?, CFMutableDictionary, UnsafeMutablePointer<Unmanaged<CFMutableDictionary>?>?, UInt64, CFTypeRef?) -> UnsafeMutableRawPointer?
@@ -147,7 +147,7 @@ private final class EnergyCounters {
 
     func reset() { last = nil }
 
-    /// Середні ватти кожного каналу від попереднього виклику; перший виклик лише запам'ятовує початок.
+    /// Average watts per channel since the previous call; the first call only records the start.
     func read() -> [String: Double]? {
         guard let now = createSamples(subscription, subscribed, nil)?.takeRetainedValue() else { return nil }
         defer { last = (Date(), now) }
@@ -165,7 +165,7 @@ private final class EnergyCounters {
         return out
     }
 
-    /// Одиниці різні навіть в одному чипі: GPU Energy на M3 у нДж, решта в мДж.
+    /// Units differ even within one chip: GPU Energy on M3 is in nJ, the rest in mJ.
     static func joules(_ value: Int64, unit: String) -> Double? {
         switch unit.trimmingCharacters(in: .whitespaces) {
         case "mJ": return Double(value) / 1e3
@@ -176,7 +176,7 @@ private final class EnergyCounters {
     }
 }
 
-/// Вимірює лише поки розбивку видно: раз на секунду PSTR (він стрибає), раз на кілька секунд лічильники чипа.
+/// Measures only while the breakdown is visible: PSTR once a second (it jumps), the chip counters once every few seconds.
 final class PowerBreakdownMonitor {
     static let tickInterval: TimeInterval = 1
     private static let ticksPerReading = 3
@@ -203,7 +203,7 @@ final class PowerBreakdownMonitor {
         queue.async { [self] in
             guard let counters else { return }
             if let w = SystemPower.readWatts() { totals.append(w) }
-            // Перший такт задає початок проміжку, далі чекаємо повний проміжок
+            // The first tick sets the start of the interval, then we wait a full interval
             if ticks % Self.ticksPerReading == 0 {
                 let activity = readActivity()
                 if let channels = counters.read() {
@@ -226,7 +226,7 @@ final class PowerBreakdownMonitor {
         var out: [PowerActivity] = []
         if let last = lastBytes, now > last.at {
             let seconds = now.timeIntervalSince(last.at)
-            // Лічильник інтерфейсу 32-бітний і переповнюється, тому віднімаємо з переносом
+            // The interface counter is 32-bit and overflows, so subtract with wraparound
             if let wifi, let was = last.wifi { out.append(PowerActivity(name: "Wi-Fi", value: PowerActivity.rate(Double(wifi &- was) / seconds))) }
             if disk >= last.disk { out.append(PowerActivity(name: "SSD", value: PowerActivity.rate(Double(disk - last.disk) / seconds))) }
         }
@@ -253,7 +253,7 @@ final class PowerBreakdownMonitor {
         return nil
     }
 
-    /// Лише внутрішній диск: образи й зовнішні накопичувачі теж мають IOBlockStorageDriver.
+    /// Internal disk only: disk images and external drives also have IOBlockStorageDriver.
     private static func internalDiskBytes() -> UInt64 {
         var iterator: io_iterator_t = 0
         guard IOServiceGetMatchingServices(kIOMainPortDefault, IOServiceMatching("IOBlockStorageDriver"), &iterator) == KERN_SUCCESS else { return 0 }

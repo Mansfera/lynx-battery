@@ -7,9 +7,9 @@ struct AlertSpec {
     var subtitle: String
     var symbol: String
     var tone: Tone
-    /// Кнопки-вибір праворуч від тексту; перша — основна.
+    /// Choice buttons to the right of the text; the first is the primary one.
     var buttons: [String] = []
-    /// Хрестик праворуч: закрити, не виконуючи дію пігулки.
+    /// Close cross on the right: dismiss without running the pill's action.
     var closable = false
 
     var color: Color {
@@ -23,7 +23,7 @@ struct AlertSpec {
     }
 }
 
-/// Порівнює попередній і новий стан та вирішує, що показати.
+/// Compares the previous and new state and decides what to show.
 final class AlertEngine {
     private var prev: BatterySnapshot?
     private var mode: PercentMode?
@@ -36,11 +36,11 @@ final class AlertEngine {
     func evaluate(_ b: BatterySnapshot) {
         defer { prev = b }
         evaluateHeat(b)
-        // Повноекранний поріг — теж поріг: інакше на 3 % після вже пройдених 5 % нічого не спрацює
+        // The full-screen threshold is a threshold too: otherwise nothing fires at 3 % after 5 % was already passed
         let low = s.fullScreenAt > 0 ? s.lowAlerts.union([s.fullScreenAt]) : s.lowAlerts
         if mode != s.percentMode {
-            // Старт або зміна режиму: вважаємо вже пройденими пороги, за якими ми зараз стоїмо, щоб не спамити.
-            // Після перемикання число стрибає, хоча заряд той самий — це не привід сповіщати.
+            // Start or mode change: treat thresholds we're already past as fired, so we don't spam.
+            // After switching, the number jumps even though the charge is the same — that's no reason to alert.
             mode = s.percentMode
             firedLow = Set(low.filter { b.percent <= $0 })
             high.start(s.highAlerts, b)
@@ -75,7 +75,7 @@ final class AlertEngine {
                 break
             }
         }
-        firedLow = firedLow.filter { b.percent <= $0 + 2 }   // скидаємо, коли піднялись вище порогу
+        firedLow = firedLow.filter { b.percent <= $0 + 2 }   // reset once we've risen above the threshold
 
         if let t = high.update(s.highAlerts, b) {
             presenter.show(AlertSpec(title: HighAlertTracker.title(t, b),
@@ -128,8 +128,8 @@ final class AlertEngine {
         } else if !b.chargerTooWeak { firedWeak = false }
     }
 
-    /// Нова версія: висить, доки не клацнуть (відкриває реліз) або не закриють (тоді пропонуємо вимкнути такі сповіщення).
-    /// onInstall — кнопка Install, коли реліз можна встановити самим.
+    /// New version: stays until clicked (opens the release) or closed (then we offer to turn such alerts off).
+    /// onInstall — the Install button, when we can install the release ourselves.
     func announceUpdate(_ r: ReleaseInfo, onInstall: (() -> Void)? = nil) {
         presenter.show(AlertSpec(title: "Lynx Battery \(r.version)",
                                  subtitle: onInstall == nil ? "A new version is out · click to download" : "A new version is out · click for what's new",
@@ -138,7 +138,7 @@ final class AlertEngine {
             switch hit {
             case .body: NSWorkspace.shared.open(r.url)
             case .close:
-                // Після того як пігулка відлетить
+                // After the pill has flown away
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self?.offerToMuteUpdates() }
             case .button: onInstall?()
             }
@@ -162,10 +162,10 @@ final class AlertEngine {
 
 enum PillHit: Equatable { case body, close, button(Int) }
 
-// MARK: - Показ
+// MARK: - Presentation
 
 final class AlertPresenter: NSObject {
-    /// Що показано: звичайна пігулка зникає сама, sticky — лише від кліку чи хрестика, хай що в «Keep alerts».
+    /// What's shown: a regular pill hides on its own, a sticky one only on a click or the cross, whatever "Keep alerts" says.
     private struct Request {
         var spec: AlertSpec
         var sticky = false
@@ -173,7 +173,7 @@ final class AlertPresenter: NSObject {
         var onHit: ((PillHit) -> Void)?
     }
     private var current: Request?
-    /// Sticky-пігулка, яку на час затулила інша: повертається, щойно та зникне.
+    /// A sticky pill temporarily covered by another one: comes back as soon as that one hides.
     private var parked: Request?
     private var pill: NSPanel?
     private var glow: NSWindow?
@@ -190,7 +190,7 @@ final class AlertPresenter: NSObject {
 
     func show(_ spec: AlertSpec) { present(Request(spec: spec), quiet: false) }
 
-    /// sticky: не зникає сама. hideAfter: власна затримка для звичайної. onHit: клік по тілу, хрестику чи кнопці.
+    /// sticky: doesn't hide on its own. hideAfter: custom delay for a regular one. onHit: click on the body, the cross or a button.
     func show(_ spec: AlertSpec, sticky: Bool = false, hideAfter: Double? = nil, quiet: Bool = false, onHit: @escaping (PillHit) -> Void) {
         present(Request(spec: spec, sticky: sticky, hideAfter: hideAfter, onHit: onHit), quiet: quiet)
     }
@@ -205,8 +205,8 @@ final class AlertPresenter: NSObject {
         current = req
         interacting = false
 
-        // Велике прозоре полотно: пігулка тягнеться за курсором і не обрізається.
-        // Кліки крізь повністю прозорі пікселі macOS пропускає до вікон під ним.
+        // Large transparent canvas: the pill follows the cursor and doesn't get clipped.
+        // macOS passes clicks through fully transparent pixels to the windows below.
         let margin: CGFloat = 130
         let probe = NSHostingView(rootView: PillBody(spec: spec))
         let pillSize = probe.fittingSize
@@ -298,7 +298,7 @@ final class AlertPresenter: NSObject {
 
 private final class KeyWindow: NSWindow { override var canBecomeKey: Bool { true } }
 
-// MARK: - Вигляд сповіщень
+// MARK: - Alert appearance
 
 extension Notification.Name { static let pillShouldLeave = Notification.Name("pillShouldLeave") }
 
@@ -306,7 +306,7 @@ private final class FirstMouseHostingView<V: View>: NSHostingView<V> {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }
 
-/// Сама пігулка: глянцева чорна капсула, тонка обвідка й світіння кольором події.
+/// The pill itself: a glossy black capsule, a thin outline and a glow in the event's color.
 struct PillBody: View {
     let spec: AlertSpec
     var onHit: (PillHit) -> Void = { _ in }
@@ -367,7 +367,7 @@ struct PillBody: View {
     }
 }
 
-/// Розтяг уздовж напрямку тягнення навколо центру: желе, а не просто зсув.
+/// Stretch along the drag direction around the center: jelly, not just an offset.
 private struct Stretch: GeometryEffect {
     var amount: CGFloat
     var angle: CGFloat
@@ -383,7 +383,7 @@ private struct Stretch: GeometryEffect {
     }
 }
 
-/// Один контур шлейфу: своя, повільніша пружина — тому відстає від пігулки.
+/// One trail outline: its own slower spring, so it lags behind the pill.
 private struct EchoLayer: View {
     let index: Int
     let size: CGSize
@@ -411,8 +411,8 @@ private struct EchoLayer: View {
     }
 }
 
-/// Пігулка як у рілсі: важка, тягнеться за курсором, а позаду біжить шлейф контурів-«відлунь»,
-/// що наздоганяють її з різною затримкою.
+/// A pill like in a reel: heavy, follows the cursor, with a trail of "echo" outlines behind it
+/// catching up with different delays.
 struct JellyPill: View {
     let spec: AlertSpec
     let onInteract: (Bool) -> Void
@@ -432,7 +432,7 @@ struct JellyPill: View {
 
     var body: some View {
         ZStack {
-            // Шлейф: контури тієї ж капсули, кожен відстає сильніше за попередній
+            // Trail: outlines of the same capsule, each lagging more than the previous one
             ForEach((1...echoes).reversed(), id: \.self) { i in
                 EchoLayer(index: i, size: pillSize, offset: offset, stretch: stretch, angle: angle, scale: scale, opacity: opacity)
             }
@@ -454,7 +454,7 @@ struct JellyPill: View {
                 .animation(.easeOut(duration: 0.22), value: opacity)
                 .onContinuousHover { phase in
                     guard !dragging, !leaving else { return }
-                    // Магніт: пігулка злегка тягнеться до курсора
+                    // Magnet: the pill leans slightly toward the cursor
                     switch phase {
                     case .active(let p):
                         let dx = p.x - pillSize.width / 2, dy = p.y - pillSize.height / 2
@@ -472,7 +472,7 @@ struct JellyPill: View {
                             onInteract(true)
                             let t = v.translation
                             let len = hypot(t.width, t.height)
-                            // Гумова стрічка: що далі тягнеш — то тугіше
+                            // Rubber band: the further you drag, the tighter it gets
                             let k = 150 * (1 - 1 / (len / 220 + 1)) / max(len, 0.001)
                             offset = CGSize(width: t.width * k, height: t.height * k)
                             angle = atan2(t.height, t.width)
@@ -488,18 +488,18 @@ struct JellyPill: View {
                                 leave(squash: true)
                             } else if vel.height < -260 || hypot(vel.width, vel.height) > 900 {
                                 guard !leaving else { return }
-                                onHit(.close)   // відкинули — те саме, що закрили
+                                onHit(.close)   // flung away — same as closed
                                 fling(vel)
                             } else {
                                 onInteract(false)
-                                offset = .zero      // пружно назад, шлейф догоняє
+                                offset = .zero      // spring back, the trail catches up
                                 stretch = 1
                             }
                         }
                 )
         }
         .onAppear {
-            // Падає згори з розтягом, перелітає й погойдується; шлейф тягнеться за нею
+            // Drops from above with a stretch, overshoots and sways; the trail follows it
             stretch = 1.25
             DispatchQueue.main.async {
                 offset = .zero; scale = 1; opacity = 1

@@ -1,6 +1,6 @@
 import Foundation
 
-// Межі ліміту заряду й переведення між шкалами. Лише чиста логіка: файл налаштувань і хелпер не чіпає.
+// Charge limit bounds and conversion between scales. Pure logic only: doesn't touch the settings file or the helper.
 
 var failures = 0
 func check<T: Equatable>(_ name: String, _ got: T, _ want: T) {
@@ -32,7 +32,7 @@ check("helper pace: normal key check", ChargeConfig().enforceInterval, 3)
 var minimalConfig = ChargeConfig(); minimalConfig.minimalEnergy = true
 check("helper pace: minimal tick", minimalConfig.tickInterval, 40)
 check("helper pace: minimal key check", minimalConfig.enforceInterval, 15)
-// Допуск таймера плюс читання раз на 5 с у відкритому поповері: інакше апка вважала б живий хелпер мертвим
+// Timer leeway plus a read every 5 s with the popover open: otherwise the app would consider a live helper dead
 check("helper pace: a slow helper still counts as alive", minimalConfig.tickInterval * 9 / 8 + 5 < ChargeStatus.aliveWindow, true)
 let oldConfigFile = #"{"enabled":true,"limit":80,"sailing":true,"sailRange":5,"heatProtection":true,"heatMax":35,"sleepUntilLimit":false,"magsafeLED":false,"discharge":true,"topUp":false,"lowPower":false}"#
 check("config: an older file still loads", (try? JSONDecoder().decode(ChargeConfig.self, from: Data(oldConfigFile.utf8)))?.minimalEnergy == nil, true)
@@ -58,7 +58,7 @@ check("target: limit off goes to full", c.chargingTarget(display: .trueCharge, b
 c.enabled = true; c.limit = 80; c.scale = .trueCharge
 check("target: true limit in original capacity", c.chargingTarget(display: .ofDesign, b), 71)
 
-// Перехід зі старої назви
+// Migration from the old name
 let script = ChargeInstall.script(helperPath: "/tmp/helper", uid: 501)
 func position(_ text: String) -> Int { script.range(of: text).map { script.distance(from: script.startIndex, to: $0.lowerBound) } ?? -1 }
 check("install stops the old helper", script.contains("launchctl bootout system/\(ChargePaths.legacyLabel)"), true)
@@ -101,7 +101,7 @@ check("prefs: copied", UserDefaults.standard.persistentDomain(forName: toDomain)
 UserDefaults.standard.setPersistentDomain(["percentMode": "stale"], forName: fromDomain)
 AppData.migratePreferences(from: fromDomain, to: toDomain)
 check("prefs: never overwrites newer settings", UserDefaults.standard.persistentDomain(forName: toDomain)?["percentMode"] as? String, "Of original capacity")
-// Порожній файл домену лишається і після removePersistentDomain, тож прибираємо й його
+// An empty domain file remains even after removePersistentDomain, so remove it too
 for domain in [fromDomain, toDomain] {
     UserDefaults.standard.removePersistentDomain(forName: domain)
     CFPreferencesAppSynchronize(domain as CFString)
@@ -109,7 +109,7 @@ for domain in [fromDomain, toDomain] {
     try? FileManager.default.removeItem(at: file)
 }
 
-// 37° при межі 35° — заряд стоїть рівно, без перемикань щосекунди
+// 37° with a 35° limit — charge holds steady, without toggling every second
 var heat = HeatGuard()
 let t0 = Date()
 func heatAt(_ temp: Double?, _ mac: Int, _ seconds: TimeInterval, plugged: Bool = true) -> Int? {
@@ -136,7 +136,7 @@ check("heat: plugging in while hot stops at the plug-in level", heatAt(36, 55, 5
 heat.update(enabled: false, temperature: 40, max: 35, macPercent: 55, plugged: true)
 check("heat: turning it off resumes", heat.stopAt, nil)
 
-// Піднятий ліміт заряджає одразу, навіть між старою й новою межею sailing
+// A raised limit charges right away, even between the old and new sailing bound
 var lr = LimitRaise()
 lr.update(limit: 85, shown: 85)
 check("raise: first reading isn't a raise", lr.active, false)
@@ -154,7 +154,7 @@ check("raise: lowering the limit again cancels it", lr.active, false)
 lr.update(limit: 90, shown: 95)
 check("raise: raising to below the charge does nothing", lr.active, false)
 
-// Здоров'я — те, що батарея вміщає зараз, від нової: 3911 з 4563 → 86, як в AlDente
+// Health is what the battery holds now relative to new: 3911 of 4563 → 86, as in AlDente
 var worn = snap(80, health: 88)
 worn.fullCapacity = 4038; worn.designCapacity = 4563
 check("health: without the current capacity it's nominal of design", worn.health, 88)

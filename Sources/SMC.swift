@@ -1,7 +1,7 @@
 import Foundation
 import IOKit
 
-// Мінімальний доступ до SMC: температура батареї, струм заряду й потужність, яких немає в ioreg.
+// Minimal SMC access: battery temperature, charge current and power that aren't in ioreg.
 private struct SMCVersion { var major: UInt8 = 0, minor: UInt8 = 0, build: UInt8 = 0, reserved: UInt8 = 0, release: UInt16 = 0 }
 private struct SMCPLimitData { var version: UInt16 = 0, length: UInt16 = 0, cpu: UInt32 = 0, gpu: UInt32 = 0, mem: UInt32 = 0 }
 private struct SMCKeyInfo { var dataSize: UInt32 = 0, dataType: UInt32 = 0, attributes: UInt8 = 0 }
@@ -42,7 +42,7 @@ final class SMC {
         return (r == kIOReturnSuccess && output.result == 0) ? output : nil
     }
 
-    /// Тип і розмір ключа; nil — ключа на цьому Mac немає.
+    /// Key type and size; nil — this Mac doesn't have the key.
     func info(_ key: String) -> (type: UInt32, size: UInt32)? {
         guard conn != 0 else { return nil }
         var p = SMCParam(); p.key = fourCC(key); p.data8 = 9
@@ -57,11 +57,11 @@ final class SMC {
         return withUnsafeBytes(of: out.bytes) { Array($0.prefix(Int(i.size))) }
     }
 
-    /// Запис ключа. Працює лише від root (для звичайного користувача SMC відповідає «not privileged»).
+    /// Key write. Works only as root (for a regular user the SMC answers "not privileged").
     @discardableResult
     func write(_ key: String, _ bytes: [UInt8]) -> Bool {
         #if HELPER_TEST
-        return true   // Tests/helper-pace.sh не чіпає справжніх ключів
+        return true   // Tests/helper-pace.sh doesn't touch the real keys
         #else
         guard let i = info(key) else { return false }
         var p = SMCParam(); p.key = fourCC(key); p.data8 = 6; p.keyInfo.dataSize = i.size
@@ -72,7 +72,7 @@ final class SMC {
         #endif
     }
 
-    /// Значення ключа як Double (підтримує flt і sp78).
+    /// Key value as Double (supports flt and sp78).
     func read(_ key: String) -> Double? {
         guard conn != 0 else { return nil }
         var p = SMCParam(); p.key = fourCC(key); p.data8 = 9
@@ -91,14 +91,14 @@ final class SMC {
         }
     }
 
-    /// Струм заряду просто зараз, мА (CHBI, ui32 у little-endian), читається без root.
-    /// Перевірено лише на прошивках із межею (bfF0): на інших сенс ключа не підтверджений, тож там nil.
+    /// Charge current right now, mA (CHBI, little-endian ui32), readable without root.
+    /// Verified only on firmware with the limit keys (bfF0): on others the key's meaning isn't confirmed, so nil there.
     func chargeCurrent() -> Int? {
         guard info("bfF0") != nil, let b = readBytes("CHBI"), b.count == 4 else { return nil }
         return Int(b[0]) | Int(b[1]) << 8 | Int(b[2]) << 16 | Int(b[3]) << 24
     }
 
-    /// Температура батареї, °C — середнє з датчиків, що відповідають.
+    /// Battery temperature, °C — average of the sensors that respond.
     func batteryTemperature() -> Double? {
         let vals = ["TB0T", "TB1T", "TB2T"].compactMap { read($0) }.filter { $0 > 0 && $0 < 90 }
         return vals.isEmpty ? nil : vals.reduce(0, +) / Double(vals.count)

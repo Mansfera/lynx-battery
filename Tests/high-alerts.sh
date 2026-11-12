@@ -1,5 +1,5 @@
 #!/bin/bash
-# Високі пороги сповіщень у всіх режимах відсотка. Запуск: Tests/high-alerts.sh. Налаштувань і файлів ліміту не чіпає.
+# High alert thresholds in all percentage modes. Run: Tests/high-alerts.sh. Doesn't touch settings or limit files.
 set -e
 cd "$(dirname "$0")/.."
 TMP="$(mktemp -d)"

@@ -3,7 +3,7 @@ import AppKit
 enum MenuIcon {
     static func color(for b: BatterySnapshot, holdingOnWall: Bool = false) -> NSColor? {
         guard Settings.shared.smartColors else { return nil }
-        // Зелений — заряджається, синій — лише «ліміт тримається від розетки»
+        // Green — charging, blue — only "limit holding on wall power"
         if b.isCharging { return .systemGreen }
         if holdingOnWall { return .systemBlue }
         if b.lowPower { return .systemYellow }
@@ -11,8 +11,8 @@ enum MenuIcon {
         return nil
     }
 
-    /// Іконка в стилі iPhone: заповнення за рівнем, відсоток усередині.
-    /// Заповнення приглушене, щоб число було одного кольору: межа заливки не ріже цифру надвоє.
+    /// iPhone-style icon: fill by level, percentage inside.
+    /// The fill is muted so the number is a single color: the fill edge doesn't cut a digit in half.
     static func image(for b: BatterySnapshot, style: IconStyle, phase: Int = -1, holdingOnWall: Bool = false) -> NSImage {
         let showNumber = style == .inside
         let bodyW: CGFloat = showNumber ? 27 : 22, bodyH: CGFloat = 12.5
@@ -37,7 +37,7 @@ enum MenuIcon {
             let fill = accent ?? base
             (showNumber ? fill.withAlphaComponent(accent == nil ? 0.42 : 0.55) : fill).setFill()
             fillRect.fill()
-            // Зарядка: світла смуга біжить по заповненню
+            // Charging: a light stripe runs across the fill
             if phase >= 0 {
                 let x = fillRect.minX + (fillRect.width + 8) * CGFloat(phase) / 9 - 6
                 NSColor.white.withAlphaComponent(showNumber ? 0.3 : 0.55).setFill()
@@ -62,7 +62,7 @@ enum MenuIcon {
         return img
     }
 
-    /// Знак стану ліворуч від батареї: ⚡ — заряджається, вилка — підключено, але заряд на паузі.
+    /// State glyph to the left of the battery: ⚡ — charging, plug — connected, but charging is paused.
     static func withStatus(_ battery: NSImage, for b: BatterySnapshot) -> NSImage {
         let symbol: String
         if b.isCharging { symbol = "bolt.fill" }
@@ -85,8 +85,8 @@ enum MenuIcon {
         return img
     }
 
-    /// Mac без батареї: вилка й потужність. Пристрій, що сідає, стає поруч: іншого місця сказати про нього тут немає.
-    /// Потужності не знаємо — найслабший пристрій або сама вилка, але ніколи не «0 W».
+    /// Mac without a battery: plug and wattage. A device running low goes next to it: there's no other place to mention it here.
+    /// Wattage unknown — the weakest device or just the plug, but never "0 W".
     static func desktop(devices: [BTDevice], watts: Double?) -> (NSImage, NSAttributedString) {
         let weakest = devices.first { $0.lowest != nil }
         let device = weakest.flatMap { d in watts == nil || (d.lowest ?? 100) <= 20 ? d : nil }

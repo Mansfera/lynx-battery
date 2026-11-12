@@ -1,6 +1,6 @@
 import Foundation
 
-// Коли cask повертає хелпер після оновлення. Лише чиста логіка: нічого не встановлює.
+// When the cask brings the helper back after an upgrade. Pure logic only: installs nothing.
 
 var failures = 0
 func check(_ name: String, _ got: Bool, _ want: Bool) {

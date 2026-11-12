@@ -1,5 +1,5 @@
 #!/bin/bash
-# Початок заряду: межа утримання при зміні ліміту й живий струм замість застарілого IsCharging. Запуск: Tests/charge-start.sh. Налаштувань і SMC не змінює.
+# Charge start: the hold limit when the limit changes, and the live current instead of a stale IsCharging. Run: Tests/charge-start.sh. Doesn't change settings or the SMC.
 set -e
 cd "$(dirname "$0")/.."
 TMP="$(mktemp -d)"

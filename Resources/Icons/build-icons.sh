@@ -1,6 +1,6 @@
 #!/bin/bash
-# Перезбирає значки з generate.py. Результат у git, тож build.sh ні Xcode, ні цього скрипта не потребує.
-# Потрібні: Xcode 26+ (actool, ictool), ImageMagick, shapely. Python можна задати: PYTHON=venv/bin/python
+# Rebuilds the icons from generate.py. The output is in git, so build.sh needs neither Xcode nor this script.
+# Requires: Xcode 26+ (actool, ictool), ImageMagick, shapely. Python can be set: PYTHON=venv/bin/python
 set -euo pipefail
 cd "$(dirname "$0")"
 ICTOOL="$(xcode-select -p)/../Applications/Icon Composer.app/Contents/Executables/ictool"
@@ -10,7 +10,7 @@ ICTOOL="$(xcode-select -p)/../Applications/Icon Composer.app/Contents/Executable
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
-# PNG для вибору в налаштуваннях і власного значка Finder: іконка 824 на полотні 1024, як у решти апок macOS
+# PNGs for the picker in settings and the custom Finder icon: an 824 icon on a 1024 canvas, like other macOS apps
 for icon in *.icon; do
     name="${icon%.icon}"
     "$ICTOOL" "$icon" --export-image --output-file "$TMP/$name.png" --platform macOS --rendition Default \
@@ -18,7 +18,7 @@ for icon in *.icon; do
     magick "$TMP/$name.png" -background none -gravity center -extent 1024x1024 -depth 8 "$name.png"
 done
 
-# Скляна іконка за замовчуванням: Assets.car для macOS 26+, AppIcon.icns для старіших
+# Default glass icon: Assets.car for macOS 26+, AppIcon.icns for older ones
 cp -R green-eyes.icon "$TMP/AppIcon.icon"
 mkdir "$TMP/out"
 xcrun actool "$TMP/AppIcon.icon" --compile "$TMP/out" --app-icon AppIcon --platform macosx \

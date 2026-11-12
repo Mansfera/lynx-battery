@@ -1,15 +1,15 @@
 import Foundation
 
-// Чиста логіка перевірки оновлень: версії, розбір відповіді GitHub і коли що показувати.
-// Лише Foundation — щоб тест збирався без решти апки.
+// Pure update-check logic: versions, parsing the GitHub response, and when to show what.
+// Foundation only — so the test builds without the rest of the app.
 
-/// Версія на кшталт 1.10.0: порівнюємо числа, а не рядки, тож 1.10.0 > 1.9.0.
+/// A version like 1.10.0: compare numbers, not strings, so 1.10.0 > 1.9.0.
 struct AppVersion: Comparable, CustomStringConvertible {
     let parts: [Int]
-    /// Є суфікс «-beta» тощо — пререліз, його не пропонуємо.
+    /// Has a suffix like "-beta" — a prerelease, we don't offer it.
     let prerelease: Bool
 
-    /// «v1.2.3», «1.2», «1.2.3-beta.1», «1.2.3+build». Решта — nil.
+    /// "v1.2.3", "1.2", "1.2.3-beta.1", "1.2.3+build". Anything else — nil.
     init?(_ raw: String) {
         var s = raw.trimmingCharacters(in: .whitespaces)
         if s.first == "v" || s.first == "V" { s.removeFirst() }
@@ -24,7 +24,7 @@ struct AppVersion: Comparable, CustomStringConvertible {
 
     var description: String { parts.map(String.init).joined(separator: ".") }
 
-    /// 1.2 == 1.2.0. Пререліз нижчий за реліз тієї ж версії.
+    /// 1.2 == 1.2.0. A prerelease is lower than the release of the same version.
     static func < (a: AppVersion, b: AppVersion) -> Bool {
         for i in 0..<max(a.parts.count, b.parts.count) {
             let x = i < a.parts.count ? a.parts[i] : 0, y = i < b.parts.count ? b.parts[i] : 0
@@ -36,15 +36,15 @@ struct AppVersion: Comparable, CustomStringConvertible {
     static func == (a: AppVersion, b: AppVersion) -> Bool { !(a < b) && !(b < a) }
 }
 
-/// Реліз на GitHub. DMG і його sha256 — для автовстановлення.
+/// A release on GitHub. The DMG and its sha256 are for auto-install.
 struct ReleaseInfo: Codable, Equatable {
-    var version: String        // без «v»: 1.2.0
-    var tag: String            // як на GitHub: v1.2.0
-    var url: URL               // сторінка релізу
+    var version: String        // without "v": 1.2.0
+    var tag: String            // as on GitHub: v1.2.0
+    var url: URL               // release page
     var dmgURL: URL?
     var dmgSHA256: String?
     var publishedAt: Date?
-    /// Підпис DMG ключем розробника (Lynx-Battery-<v>.dmg.sig). Без нього автовстановлення немає.
+    /// DMG signature with the developer key (Lynx-Battery-<v>.dmg.sig). Without it there's no auto-install.
     var sigURL: URL? = nil
 }
 
@@ -52,35 +52,35 @@ enum UpdatePolicy {
     static let owner = "Mansfera"
     static let repo = "lynx-battery"
     static var latestURL: URL { URL(string: "https://api.github.com/repos/\(owner)/\(repo)/releases/latest")! }
-    /// Як часто питати GitHub. Без токена ліміт — 60 запитів на годину з IP, ми робимо ~3 на добу.
+    /// How often to ask GitHub. Without a token the limit is 60 requests per hour per IP; we make ~3 a day.
     static let interval: TimeInterval = 8 * 3600
-    /// Не частіше за це навіть після перезапуску апки.
+    /// No more often than this, even after the app restarts.
     static let minInterval: TimeInterval = 3600
 
-    /// Новіша за поточну. Пререліз і нерозбірні версії — ні.
+    /// Newer than the current one. Prereleases and unparseable versions — no.
     static func isNewer(_ latest: String, than current: String) -> Bool {
         guard let l = AppVersion(latest), !l.prerelease, let c = AppVersion(current) else { return false }
         return l > c
     }
 
-    /// Банер у поповері: перевірка ввімкнена, версія новіша й її не закрили.
+    /// Banner in the popover: checking is on, the version is newer and it wasn't dismissed.
     static func showBanner(_ r: ReleaseInfo?, current: String, checkOn: Bool, dismissed: String?) -> Bool {
         guard checkOn, let r, isNewer(r.version, than: current) else { return false }
         return dismissed.map { AppVersion($0) != AppVersion(r.version) } ?? true
     }
 
-    /// Сповіщення — одне на кожну нову версію.
+    /// One alert per new version.
     static func shouldAlert(_ r: ReleaseInfo?, current: String, checkOn: Bool, alertsOn: Bool, alerted: String?) -> Bool {
         guard checkOn, alertsOn, let r, isNewer(r.version, than: current) else { return false }
         return alerted.map { AppVersion($0) != AppVersion(r.version) } ?? true
     }
 
     static func isDue(lastCheck: Date?, now: Date, interval: TimeInterval = UpdatePolicy.interval) -> Bool {
-        guard let last = lastCheck, last <= now else { return true }   // годинник перевели назад — теж час
+        guard let last = lastCheck, last <= now else { return true }   // the clock was set back — also time to check
         return now.timeIntervalSince(last) >= interval
     }
 
-    /// Відповідь /releases/latest. Чернетки й пререлізи відкидаємо, хоч GitHub їх тут і не віддає.
+    /// The /releases/latest response. Drafts and prereleases are rejected, even though GitHub doesn't return them here.
     static func parse(_ data: Data) -> ReleaseInfo? {
         struct Asset: Decodable { let name: String; let browser_download_url: URL; let digest: String? }
         struct Release: Decodable {
@@ -103,18 +103,18 @@ enum UpdatePolicy {
 
     static let caskrooms = ["/opt/homebrew/Caskroom/lynx-battery", "/usr/local/Caskroom/lynx-battery"]
 
-    /// Встановлено через cask: оновлює brew, інакше він не знатиме, яка версія стоїть.
+    /// Installed via the cask: brew updates it, otherwise it won't know which version is installed.
     static func isHomebrewInstall(caskrooms: [String] = caskrooms, exists: (String) -> Bool = { FileManager.default.fileExists(atPath: $0) }) -> Bool {
         caskrooms.contains(where: exists)
     }
 
-    /// Чи можна взагалі встановити цей реліз самим: є ключ, підпис, дайджест, і це не cask.
+    /// Whether we can install this release ourselves at all: there's a key, a signature, a digest, and it's not a cask.
     static func canInstall(_ r: ReleaseInfo?, keyPresent: Bool, homebrew: Bool) -> Bool {
         guard let r, keyPresent, !homebrew else { return false }
         return r.dmgURL != nil && r.sigURL != nil && r.dmgSHA256.map(isSHA256) == true
     }
 
-    /// Автовстановлення: одна спроба на версію за запуск, далі — банер і сповіщення.
+    /// Auto-install: one attempt per version per launch, then the banner and the alert.
     static func shouldAutoInstall(_ r: ReleaseInfo?, current: String, checkOn: Bool, autoOn: Bool,
                                   keyPresent: Bool, homebrew: Bool, attempted: Set<String>) -> Bool {
         guard checkOn, autoOn, let r, isNewer(r.version, than: current),

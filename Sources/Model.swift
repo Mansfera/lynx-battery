@@ -3,7 +3,7 @@ import Combine
 
 final class AppModel: ObservableObject {
     @Published var battery: BatterySnapshot?
-    /// Mac без батареї: скільки споживає система, Вт; nil — цей Mac такого не повідомляє.
+    /// Mac without a battery: how much the system draws, W; nil — this Mac doesn't report it.
     @Published var macWatts: Double?
     @Published var wattHistory: [Double] = []
     static let wattInterval: TimeInterval = 3
@@ -26,15 +26,15 @@ final class AppModel: ObservableObject {
     private var firstTab: Tab { battery == nil ? .power : .overview }
     @Published var apps: [AppEnergy] = []
     @Published var expandedApp: String?
-    /// Куди йде потужність усього Mac; міряємо лише поки цю розбивку видно.
+    /// Where the whole Mac's power goes; measured only while this breakdown is visible.
     @Published var breakdown: PowerBreakdown?
     var breakdownOnScreen = false { didSet { scheduleBreakdown() } }
     @Published var lowPowerBusy = false
     @Published var popoverShown = false { didSet { if popoverShown != oldValue { scheduleSampling(); if popoverShown { refresh() }; startBluetoothOnDevicesTab() } } }
-    /// Вкладка Power на екрані: живий замір енергії по апках кожні 10 с, батарея — кожні 2 с.
+    /// Power tab on screen: live per-app energy sample every 10 s, battery every 2 s.
     static let liveEnergyInterval: TimeInterval = 10
     static let liveRefreshInterval: TimeInterval = 2
-    /// Перший живий замір — коли поповер уже домалювався: інакше top міряє саме відкриття, і апка бачить себе в топі.
+    /// The first live sample once the popover has finished drawing: otherwise top measures the opening itself, and the app sees itself at the top.
     static let liveEnergyDelay: TimeInterval = 2
     let energy = EnergyMonitor()
     let charge = ChargeControl()
@@ -42,7 +42,7 @@ final class AppModel: ObservableObject {
     private var classicDevices: [BTDevice] = []
     private var energyTimer: Timer?
     private var liveEnergyTimer: Timer?
-    /// nil — вкладку Power не видно; true — часті заміри; false — один замір при відкритті.
+    /// nil — the Power tab isn't visible; true — frequent samples; false — one sample on open.
     private var liveEnergyMode: Bool?
     private var powerTimer: Timer?
     private var breakdownTimer: Timer?
@@ -68,9 +68,9 @@ final class AppModel: ObservableObject {
         NotificationCenter.default.addObserver(forName: .NSProcessInfoPowerStateDidChange, object: nil, queue: .main) { [weak self] _ in
             self?.refresh()
         }
-        // Перемикач відсотка: число й ліміт міняються одразу, а не за наступним оновленням
+        // Percentage toggle: the number and the limit change right away, not on the next update
         percentMode = Settings.shared.$percentMode.dropFirst().receive(on: DispatchQueue.main).sink { [weak self] _ in self?.refresh() }
-        // Іконка показує стан хелпера, тож малюємо її одразу, щойно він змінився
+        // The icon shows the helper's state, so redraw it as soon as that changes
         chargeStatus = charge.$status.map { $0?.wallHold }.removeDuplicates().receive(on: DispatchQueue.main).sink { [weak self] _ in self?.onChange?() }
         ble.onChange = { [weak self] in self?.mergeDevices() }
         energyMode = Settings.shared.$minimalEnergy.dropFirst().receive(on: DispatchQueue.main).sink { [weak self] _ in self?.applyEnergyMode() }
@@ -78,7 +78,7 @@ final class AppModel: ObservableObject {
         trackingMode = Settings.shared.$appTracking.combineLatest(Settings.shared.$livePowerTab).dropFirst()
             .receive(on: DispatchQueue.main).sink { [weak self] _ in self?.scheduleEnergy(); self?.scheduleSampling() }
         applyEnergyMode()
-        // У мінімальному режимі top на старті не запускаємо: перший замір — за розкладом Eco
+        // In minimal mode don't run top at startup: the first sample follows the Eco schedule
         if !Settings.shared.minimalEnergy { sampleEnergy() }
         installer.charge = charge
         installer.onInstalled = { [weak self] v in self?.alerts.announceInstalled(v) }
@@ -100,7 +100,7 @@ final class AppModel: ObservableObject {
         return true
     }
 
-    /// Запускає або зупиняє все фонове під перемикач «Minimal energy use».
+    /// Starts or stops all background work per the "Minimal energy use" toggle.
     private func applyEnergyMode() {
         let minimal = Settings.shared.minimalEnergy
         charge.minimalEnergy = minimal
@@ -113,7 +113,7 @@ final class AppModel: ObservableObject {
         scheduleSampling()
     }
 
-    /// Запускає або зупиняє опитування пристроїв під «Track devices» і «Minimal energy use».
+    /// Starts or stops device polling per "Track devices" and "Minimal energy use".
     private func applyDeviceTracking() {
         deviceTimer?.invalidate(); deviceTimer = nil
         guard Settings.shared.trackDevices else {
@@ -124,11 +124,11 @@ final class AppModel: ObservableObject {
             return
         }
         if Settings.shared.minimalEnergy {
-            // Пристрої читаємо лише при відкритті поповера; старих чисел під виглядом живих не лишаємо
+            // Read devices only when the popover opens; don't leave old numbers looking live
             ble.stop()
             return
         }
-        // Дозвіл уже є — читаємо й у фоні. Ще немає — про нього спитає вкладка Devices, а не запуск апки
+        // Permission already granted — read in the background too. Not yet — the Devices tab will ask for it, not the app launch
         if ble.authorized || devicesOnScreen { ble.start() }
         refreshDevices()
         deviceTimer = Timer.scheduledTimer(withTimeInterval: 90, repeats: true) { [weak self] _ in self?.refreshDevices() }
@@ -137,7 +137,7 @@ final class AppModel: ObservableObject {
 
     var energyInterval: TimeInterval { Settings.shared.effectiveAppTracking.interval }
 
-    /// Заміри за розкладом — єдині, що йдуть в історію. Крок не залежить від поповера, тож години рівномірні.
+    /// Scheduled samples are the only ones that go into history. The step doesn't depend on the popover, so the hours are even.
     private func scheduleEnergy() {
         guard energyTimer?.timeInterval != energyInterval else { return }
         energyTimer?.invalidate()
@@ -151,12 +151,12 @@ final class AppModel: ObservableObject {
         if devicesOnScreen, Settings.shared.trackDevices, !Settings.shared.minimalEnergy { ble.start() }
     }
 
-    /// Мінімальний режим пригальмовує лише фон: відкритий поповер показує свіжі числа, бо на них дивляться.
+    /// Minimal mode only slows the background: an open popover shows fresh numbers, because someone is looking at them.
     private var sampleRarely: Bool { Settings.shared.minimalEnergy && !popoverShown }
-    /// Часті оновлення на вкладці Power: можна вимкнути в налаштуваннях, а мінімальний режим їх не вмикає.
+    /// Frequent updates on the Power tab: can be turned off in settings, and minimal mode doesn't enable them.
     var powerTabLive: Bool { popoverShown && tab == .power && Settings.shared.livePowerTab && !Settings.shared.minimalEnergy }
-    /// Заряд і так приходить сповіщенням IOPS, таймер лише страхує.
-    /// Поки поповер відкритий, заряд, що щойно почався, видно за секунди.
+    /// Charge arrives via IOPS notifications anyway; the timer is only a backup.
+    /// While the popover is open, charging that just started shows within seconds.
     var refreshInterval: TimeInterval { sampleRarely ? 300 : powerTabLive ? Self.liveRefreshInterval : (popoverShown ? 5 : 20) }
     var powerInterval: TimeInterval { sampleRarely ? 60 : Self.wattInterval }
 
@@ -177,7 +177,7 @@ final class AppModel: ObservableObject {
         liveEnergyMode = mode
         liveEnergyTimer?.invalidate(); liveEnergyTimer = nil
         guard let mode else { return }
-        // Свіжий замір уже є — на перемиканні вкладок top удруге не запускаємо
+        // A fresh sample already exists — don't run top a second time when switching tabs
         let fresh = energy.lastSample.map { Date().timeIntervalSince($0) < Self.liveEnergyInterval } ?? false
         if fresh && !mode { return }
         liveEnergyTimer = Timer.scheduledTimer(withTimeInterval: fresh ? Self.liveEnergyInterval : Self.liveEnergyDelay, repeats: false) { [weak self] _ in
@@ -194,7 +194,7 @@ final class AppModel: ObservableObject {
         guard wanted != (breakdownTimer != nil) else { return }
         breakdownTimer?.invalidate(); breakdownTimer = nil
         guard wanted else { return }
-        // Старих чисел під виглядом живих не лишаємо: проміжок починається заново
+        // Don't leave old numbers looking live: the interval starts over
         breakdown = nil
         breakdownMonitor.reset()
         tickBreakdown()
@@ -212,28 +212,28 @@ final class AppModel: ObservableObject {
         powerTimer = Timer.scheduledTimer(withTimeInterval: powerInterval, repeats: true) { [weak self] _ in self?.samplePower() }
     }
 
-    /// Замір за розкладом: іде в історію.
+    /// Scheduled sample: goes into history.
     func sampleEnergy() {
         energy.sample(record: true) { [weak self] in self?.apps = self?.energy.apps ?? [] }
     }
 
-    /// Живий замір для відкритої вкладки Power: лише список зараз, без історії.
+    /// Live sample for the open Power tab: only the current list, no history.
     private func sampleLive() {
         energy.sample(record: false) { [weak self] in self?.apps = self?.energy.apps ?? [] }
     }
 
-    /// ПКМ перемикає енергозбереження, лише коли це не спитає пароль; інакше відкриває поповер, як і ЛКМ.
+    /// Right-click toggles Low Power only when that won't ask for a password; otherwise it opens the popover, like left-click.
     func rightClickTogglesLowPower() -> Bool {
         guard battery != nil, Settings.shared.rightClickLowPower else { return false }
         charge.readStatus()
         return charge.installed && charge.helperAlive
     }
 
-    /// Енергозбереження: через хелпер (без пароля), інакше — pmset з паролем адміністратора.
+    /// Low Power: via the helper (no password), otherwise pmset with the admin password.
     func toggleLowPower() {
         guard let b = battery, !lowPowerBusy else { return }
         let want = !b.lowPower
-        charge.readStatus()   // хелпер перевіряємо за свіжим станом: у фоні він читається рідше
+        charge.readStatus()   // check the helper against fresh status: in the background it's read less often
         if charge.installed && charge.helperAlive {
             announceLowPower(want)
             charge.config.lowPower = want
@@ -243,7 +243,7 @@ final class AppModel: ObservableObject {
         lowPowerBusy = true
         LowPowerMode.set(want) { [weak self] ok in
             self?.lowPowerBusy = false
-            // Пароль скасували — режим не змінився, тож і сповіщати нема про що
+            // Password cancelled — the mode didn't change, so there's nothing to alert about
             if ok { self?.announceLowPower(want) }
             self?.refresh()
         }
@@ -257,7 +257,7 @@ final class AppModel: ObservableObject {
 
     func refresh() {
         guard SystemPower.hasInternalBattery(), var b = BatteryReader.read() else {
-            // Mac без батареї (iMac, mini, Studio): потужність, енергія по апках і пристрої
+            // Mac without a battery (iMac, mini, Studio): wattage, per-app energy and devices
             if battery != nil { battery = nil }
             if tab == .overview || tab == .charge { tab = .power }
             if powerTimer == nil {
@@ -287,11 +287,11 @@ final class AppModel: ObservableObject {
             if macWatts != nil { macWatts = nil; onChange?() }
             return
         }
-        // Показник стрибає щосекунди: згладжуємо, щоб число в меню-барі встигали прочитати
+        // The reading jumps every second: smooth it so the number in the menu bar can be read
         let smooth = macWatts.map { ($0 + w) / 2 } ?? w
         let changed = macWatts?.rounded() != smooth.rounded()
         macWatts = smooth
-        // Історія розрахована на заміри раз на wattInterval: у мінімальному режимі лише поточне число
+        // History assumes a sample every wattInterval: in minimal mode only the current number
         if !Settings.shared.minimalEnergy {
             wattHistory.append(smooth)
             if wattHistory.count > Int(300 / Self.wattInterval) { wattHistory.removeFirst() }
@@ -304,10 +304,10 @@ final class AppModel: ObservableObject {
         deviceQueue.async { [weak self] in
             let (list, paired) = DeviceReader.read()
             DispatchQueue.main.async {
-                // Вимкнули, поки читали
+                // Turned off while we were reading
                 guard Settings.shared.trackDevices else { return }
                 self?.classicDevices = list
-                // Те, що вже звітує заряд (AirPods), через BLE не чіпаємо
+                // Don't touch via BLE what already reports charge (AirPods)
                 self?.ble.paired = paired.filter { name, _ in !list.contains { $0.name == name && $0.lowest != nil } }
                 self?.mergeDevices()
                 self?.ble.poll()
@@ -315,7 +315,7 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// Класичний Bluetooth (system_profiler) + BLE Battery Service; дублікати за назвою зливаємо.
+    /// Classic Bluetooth (system_profiler) + BLE Battery Service; duplicates by name are merged.
     private func mergeDevices() {
         guard Settings.shared.trackDevices else { return }
         var list = classicDevices

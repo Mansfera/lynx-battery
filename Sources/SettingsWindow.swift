@@ -1,15 +1,15 @@
 import AppKit
 import SwiftUI
 
-// Налаштування — окреме системне вікно, а не сторінка в поповері: поповер закривається від кліку поруч,
-// а тут зручно міняти стиль іконки й одразу бачити її в меню-барі.
+// Settings is a separate system window, not a page in the popover: the popover closes on a click nearby,
+// and here it's convenient to change the icon style and see it in the menu bar right away.
 
-/// Дія йде ланцюжком відповідачів до AppDelegate; він у main.swift, якого немає в тестових збірках.
+/// The action goes up the responder chain to AppDelegate; it lives in main.swift, which isn't in the test builds.
 @objc protocol SettingsOpener { func openSettings() }
 
 enum AppMenu {
-    /// Головне меню LSUIElement-апка не показує, але лише через нього працюють ⌘, ⌘W ⌘Q і ⌘C ⌘V у полях вводу.
-    /// Дії без target ідуть ланцюжком відповідачів до NSApp і AppDelegate.
+    /// An LSUIElement app doesn't show the main menu, but ⌘, ⌘W ⌘Q and ⌘C ⌘V in text fields only work through it.
+    /// Actions without a target go up the responder chain to NSApp and AppDelegate.
     static func installMainMenu() {
         func submenu(_ title: String, _ items: [NSMenuItem]) -> NSMenuItem {
             let m = NSMenu(title: title)
@@ -52,14 +52,14 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
         Settings.shared.syncLaunchAtLogin()
         let w = window ?? make()
         window = w
-        // LSUIElement-апка сама не активується: без цього вікно відкриється за чужими
+        // An LSUIElement app doesn't activate itself: without this the window opens behind others
         NSApp.activate(ignoringOtherApps: true)
         w.makeKeyAndOrderFront(nil)
-        w.makeFirstResponder(nil)   // не вмикати курсор у полі порогів при кожному відкритті
+        w.makeFirstResponder(nil)   // don't put the cursor in the thresholds field on every open
     }
 
     func make() -> NSWindow {
-        // Вкладки в тулбарі, як у системних апок: усе разом — понад 1000 pt, нижні секції ховались би за краєм
+        // Tabs in the toolbar, like system apps: all together it's over 1000 pt, the bottom sections would be hidden past the edge
         let tabs = NSTabViewController()
         tabs.tabStyle = .toolbar
         tabs.addTabViewItem(tab("General", symbol: "gearshape", GeneralSettings(model: model)))
@@ -77,19 +77,19 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
 
     private func tab<V: View>(_ label: String, symbol: String, _ view: V) -> NSTabViewItem {
         let host = NSHostingController(rootView: view)
-        host.sizingOptions = .preferredContentSize   // вікно йде за висотою вкладки
-        host.title = label                           // заголовок вікна — назва вкладки, як у системних апок
+        host.sizingOptions = .preferredContentSize   // the window follows the tab's height
+        host.title = label                           // window title is the tab name, like system apps
         let item = NSTabViewItem(viewController: host)
         item.label = label
         item.image = NSImage(systemSymbolName: symbol, accessibilityDescription: label)
         return item
     }
 
-    /// Закриття забирає фокус із поля порогів, і введене значення додається, а не губиться.
+    /// Closing takes focus from the thresholds field, so the typed value is added rather than lost.
     func windowWillClose(_ n: Notification) { window?.makeFirstResponder(nil) }
 }
 
-/// Спільне оформлення вкладки. Висота задана: у Form немає власної, а на малому екрані вона прокрутиться.
+/// Shared tab styling. The height is set: Form has none of its own, and on a small screen it will scroll.
 private struct SettingsPane<Content: View>: View {
     let height: CGFloat
     @ViewBuilder var content: Content
@@ -114,7 +114,7 @@ private struct SectionHead: View {
     var body: some View { Text(text).font(Brand.text(13, .semibold)) }
 }
 
-/// Без хелпера перемикач вимкнений і показує «вимкнено», але вибір зберігається на випадок, якщо хелпер повернеться.
+/// Without the helper the toggle is disabled and shows "off", but the choice is kept in case the helper comes back.
 struct RightClickLowPowerToggle: View {
     @ObservedObject var control: ChargeControl
     @ObservedObject var s: Settings
@@ -150,7 +150,7 @@ struct GeneralSettings: View {
                 }
             }
             Section {
-                // Без батареї в меню-барі лише значок пристрою — стиль і анімація нічого не змінять
+                // Without a battery the menu bar has only the device icon — style and animation change nothing
                 if hasBattery {
                     Picker("Icon", selection: $s.iconStyle) {
                         ForEach(IconStyle.allCases) { Text($0.rawValue).tag($0) }
@@ -199,7 +199,7 @@ struct GeneralSettings: View {
     }
 }
 
-/// Значки в ряд, щоб вибирати за виглядом, а не за назвою.
+/// Icons in a row, to choose by look rather than by name.
 private struct AppIconPicker: View {
     @Binding var selection: AppIconVariant
     @Environment(\.palette) private var pal
@@ -314,7 +314,7 @@ struct AboutSettings: View {
 
     private func info(_ key: String) -> String { Bundle.main.object(forInfoDictionaryKey: key) as? String ?? "" }
 
-    /// Підкреслення: у вторинному тексті самого кольору замало, щоб посилання читалось як посилання.
+    /// Underline: in secondary text, color alone isn't enough for a link to read as a link.
     private func link(_ title: String, _ url: String) -> AttributedString {
         var text = AttributedString(title)
         text.link = URL(string: url)
@@ -343,7 +343,7 @@ struct AboutSettings: View {
                     Button("Quit") { NSApp.terminate(nil) }
                 } label: {
                     Text("Quit Lynx Battery")
-                    // Ліміт тримає root-хелпер, йому апка не потрібна
+                    // The limit is held by the root helper, it doesn't need the app
                     Text(model.charge.installed
                          ? "Alerts and the menu bar icon stop until you open it again. The charge limit keeps working."
                          : "Alerts and the menu bar icon stop until you open it again.")
@@ -353,7 +353,7 @@ struct AboutSettings: View {
     }
 }
 
-/// Пороги — вибрані значення чипами з хрестиком і поле вводу: «15» або «15, 25».
+/// Thresholds — selected values as chips with a cross, plus an input field: "15" or "15, 25".
 struct ThresholdInput: View {
     @Binding var values: Set<Int>
     let range: ClosedRange<Int>
@@ -378,7 +378,7 @@ struct ThresholdInput: View {
                 .accessibilityLabel("Remove \(v)%")
             }
             HStack(spacing: 2) {
-                // У Form заголовок поля стає підписом, тож підказка — лише prompt
+                // In a Form the field title becomes a label, so the hint is only the prompt
                 TextField("", text: $text, prompt: Text("Add %"))
                     .labelsHidden()
                     .textFieldStyle(.plain)
@@ -391,21 +391,21 @@ struct ThresholdInput: View {
                 Text("\(range.lowerBound)–\(range.upperBound)").font(Brand.text(9.5)).foregroundStyle(bad ? Brand.signal : pal.muted)
             }
             .padding(.horizontal, 11).padding(.vertical, 6)
-            .background(pal.fg.opacity(0.07), in: Capsule())   // pal.sunk зливається з карткою форми
+            .background(pal.fg.opacity(0.07), in: Capsule())   // pal.sunk blends into the form card
             .overlay(Capsule().strokeBorder(bad ? Brand.signal : .clear))
         }
     }
 
     private func add() {
         let nums = text.split(whereSeparator: { !$0.isNumber }).compactMap { Int($0) }
-        guard !nums.isEmpty || !text.isEmpty else { return }   // порожнє поле — не помилка
+        guard !nums.isEmpty || !text.isEmpty else { return }   // an empty field isn't an error
         let ok = nums.filter { range.contains($0) }
         values.formUnion(ok)
         if ok.count == nums.count && !nums.isEmpty { text = "" } else { bad = true }
     }
 }
 
-/// Простий перенос рядків для чипів.
+/// Simple line wrapping for chips.
 struct FlowRow: Layout {
     var spacing: CGFloat = 6
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {

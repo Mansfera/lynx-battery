@@ -1,8 +1,8 @@
 import AppKit
 import SwiftUI
 
-// Перевірка режиму Mac без батареї: логіка плюс PNG кожного екрана. Запуск: Tests/desktop-mode.sh
-// Симуляцію вмикають ті самі прапорці компіляції, що й у build.sh.
+// Check of the no-battery Mac mode: logic plus a PNG of each screen. Run: Tests/desktop-mode.sh
+// The simulation is enabled by the same compile flags as in build.sh.
 
 let out = URL(fileURLWithPath: CommandLine.arguments[1], isDirectory: true)
 let fonts = URL(fileURLWithPath: CommandLine.arguments[2], isDirectory: true)
@@ -19,7 +19,7 @@ func save(_ rep: NSBitmapImageRep, _ name: String) {
     try? rep.representation(using: .png, properties: [:])?.write(to: out.appendingPathComponent("\(name).png"))
 }
 
-/// Без показу на екрані: вікно лише дає поповеру тему й розмір.
+/// Not shown on screen: the window only gives the popover its theme and size.
 func render(_ model: AppModel, _ name: String, dark: Bool = false) {
     render(view: PopoverView(model: model), name, dark: dark)
 }
@@ -40,7 +40,7 @@ func render<V: View>(view: V, _ name: String, dark: Bool = false) {
     win.contentView = nil
 }
 
-/// Вміст меню-бару на смузі потрібної теми — те, що updateIcon кладе в кнопку.
+/// Menu bar content on a strip of the right theme — what updateIcon puts in the button.
 func renderMenu(_ states: [(name: String, devices: [BTDevice], watts: Double?)]) {
     let rowH: CGFloat = 26, width: CGFloat = 220, scale: CGFloat = 2
     let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: Int(width * 2 * scale), pixelsHigh: Int(rowH * CGFloat(states.count) * scale),
@@ -74,7 +74,7 @@ NSApp.setActivationPolicy(.prohibited)
 Brand.registerFonts(in: fonts)
 try? FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
 
-// MARK: - Логіка, однакова на будь-якому Mac
+// MARK: - Logic, the same on any Mac
 
 let internalBattery: [String: Any] = ["Type": "InternalBattery", "Is Present": true]
 let ups: [String: Any] = ["Type": "UPS", "Is Present": true]
@@ -97,7 +97,7 @@ check("menu bar: no watts, no devices shows only the plug", title([], nil) == ""
 
 renderMenu([("watts", [], 12.4), ("low device", [lowMouse], 37.6), ("no watts, device", [mouse], nil), ("no watts, no device", [], nil)])
 
-// MARK: - Цей Mac: реальні показники
+// MARK: - This Mac: real readings
 
 print("\nThis Mac: \(SystemPower.hasInternalBattery() ? "macOS reports an internal battery" : "no internal battery")")
 for key in ["PSTR", "PDTR"] {
@@ -106,7 +106,7 @@ for key in ["PSTR", "PDTR"] {
 print("")
 
 let model = AppModel()
-// Без цього AppModel змінює шкалу ліміту під порожні налаштування тестів, і ChargeControl пише її у файл, який виконує хелпер.
+// Without this, AppModel changes the limit scale to match the tests' empty settings, and ChargeControl writes it to the file the helper enforces.
 model.charge.setPreview(installed: false, status: nil)
 
 #if SIMULATE_NO_BATTERY

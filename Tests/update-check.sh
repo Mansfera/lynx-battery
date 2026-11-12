@@ -1,5 +1,5 @@
 #!/bin/bash
-# Перевірка оновлень: версії, розбір відповіді GitHub, банер і сповіщення. Запуск: Tests/update-check.sh. Без мережі, налаштувань не чіпає.
+# Update check: versions, parsing the GitHub response, banner and alert. Run: Tests/update-check.sh. No network, doesn't touch settings.
 set -e
 cd "$(dirname "$0")/.."
 TMP="$(mktemp -d)"

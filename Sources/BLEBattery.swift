@@ -1,12 +1,12 @@
 import CoreBluetooth
 import Foundation
 
-/// Заряд пристроїв через стандартний Bluetooth Battery Service (GATT 0x180F / рівень 0x2A19).
-/// Так iPhone, iPad і багато навушників (Sony, Bose, Logitech…) віддають заряд спареному Mac.
-/// Потрібен дозвіл на Bluetooth — macOS спитає один раз, коли вперше створюємо central, тому start() без дозволу кличе лише вкладка Devices.
-/// iPhone та iPad не тримають з'єднання з Mac, тож їх шукаємо коротким скануванням раз на кілька хвилин.
-/// До чужих телефонів не підключаємось: macOS показує назву лише своїх пристроїв, і ми беремо тільки ті,
-/// чия назва точно збігається зі списком спарених у system_profiler.
+/// Device charge via the standard Bluetooth Battery Service (GATT 0x180F / level 0x2A19).
+/// This is how iPhone, iPad and many headphones (Sony, Bose, Logitech…) report charge to a paired Mac.
+/// Needs Bluetooth permission — macOS asks once, when we first create the central, so only the Devices tab calls start() without permission.
+/// iPhone and iPad don't stay connected to the Mac, so we find them with a short scan every few minutes.
+/// We don't connect to other people's phones: macOS shows names only for your own devices, and we take only those
+/// whose name exactly matches the paired list in system_profiler.
 final class BLEBattery: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate {
     private let batteryService = CBUUID(string: "180F")
     private let batteryLevel = CBUUID(string: "2A19")
@@ -14,17 +14,17 @@ final class BLEBattery: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate
     private var peripherals: [UUID: CBPeripheral] = [:]
     private var levels: [UUID: (name: String, level: Int, seen: Date)] = [:]
     private var timer: Timer?
-    /// Підключені нами зі сканування: прочитали заряд — відключаємось, щоб не тримати зайве з'єднання.
+    /// Connected by us from a scan: once the charge is read, disconnect so we don't hold an extra connection.
     private var scanned: Set<UUID> = []
-    /// Один пристрій — одна спроба за сканування: після відключення він рекламує себе знову.
+    /// One device — one attempt per scan: after disconnecting it advertises itself again.
     private var tried: Set<UUID> = []
-    /// Показали, що Battery Service немає (Apple Watch, AirPods) — більше не турбуємо.
+    /// Showed it has no Battery Service (Apple Watch, AirPods) — don't bother it again.
     private var noBattery: Set<UUID> = []
     private var lastScan = Date.distantPast
     private var lastConnected = -1
     private let scanEvery: TimeInterval = 300
     private let scanFor: TimeInterval = 8
-    /// Спарені пристрої (назва → тип) із DeviceReader.
+    /// Paired devices (name → type) from DeviceReader.
     var paired: [String: String] = [:]
     var onChange: (() -> Void)?
 
@@ -44,7 +44,7 @@ final class BLEBattery: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate
         timer?.tolerance = 10
     }
 
-    /// Мінімальне споживання: без сканувань і з'єднань. Разом із central зникають і наші з'єднання; заряд, що вже прочитали, старіє сам.
+    /// Minimal energy use: no scans and no connections. Our connections go away with the central; charge already read ages on its own.
     func stop() {
         timer?.invalidate(); timer = nil
         central?.stopScan()
@@ -56,9 +56,9 @@ final class BLEBattery: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate
 
     func poll() {
         guard let c = central, c.state == .poweredOn else { return }
-        // Пристрої, які вже тримає система (iPhone через Continuity, навушники) і які мають Battery Service
+        // Devices the system already holds (iPhone via Continuity, headphones) that have a Battery Service
         let connected = c.retrieveConnectedPeripherals(withServices: [batteryService])
-        // У лог — лише зміни: інакше запис на диск кожні 30 с і файл, що росте без меж
+        // Log only changes: otherwise a disk write every 30 s and a file that grows without bound
         if connected.count != lastConnected {
             lastConnected = connected.count
             Self.trace("poll: \(connected.count) connected with Battery Service")
@@ -91,11 +91,11 @@ final class BLEBattery: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate
         peripherals[p.identifier] = p
         p.delegate = self
         c.connect(p)
-        // Не відповів — забуваємо спробу, інакше телефон поза зоною висів би в черзі з'єднань вічно
+        // No response — forget the attempt, otherwise a phone out of range would sit in the connection queue forever
         DispatchQueue.main.asyncAfter(deadline: .now() + 20) { [weak self] in self?.finish(p) }
     }
 
-    /// Закінчили зі сканованим пристроєм. Те, що тримає сама система, не чіпаємо.
+    /// Done with a scanned device. Don't touch what the system itself holds.
     private func finish(_ p: CBPeripheral) {
         guard scanned.remove(p.identifier) != nil else { return }
         central?.cancelPeripheralConnection(p)
@@ -155,7 +155,7 @@ final class BLEBattery: NSObject, CBCentralManagerDelegate, CBPeripheralDelegate
         onChange?()
     }
 
-    /// Короткий лог у ~/Library/Application Support/com.mansfera.lynxbattery/ble.log — щоб бачити, що знайшлось.
+    /// Short log in ~/Library/Application Support/com.mansfera.lynxbattery/ble.log — to see what was found.
     static func trace(_ s: String) {
         let dir = AppData.dir
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)

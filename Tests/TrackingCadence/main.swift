@@ -1,6 +1,6 @@
 import AppKit
 
-// Як часто міряємо енергію по апках (Frequent / Normal / Eco) і живі заміри на вкладці Power. Запуск: Tests/tracking-cadence.sh
+// How often we measure per-app energy (Frequent / Normal / Eco) and live samples on the Power tab. Run: Tests/tracking-cadence.sh
 
 var failures = 0
 
@@ -26,7 +26,7 @@ func childCount(named name: String) -> Int {
 _ = NSApplication.shared
 NSApp.setActivationPolicy(.prohibited)
 
-// CFFIXED_USER_HOME переносить файли даних, але не налаштування: вони живуть у справжньому ~/Library/Preferences під назвою цієї програми
+// CFFIXED_USER_HOME relocates data files but not preferences: they live in the real ~/Library/Preferences under this program's name
 let testDefaults = ProcessInfo.processInfo.processName
 UserDefaults.standard.removePersistentDomain(forName: testDefaults)
 
@@ -39,7 +39,7 @@ check("Eco is less often than Normal", AppTracking.eco.interval > AppTracking.no
 check("Eco still gives the hourly history a few samples", AppTracking.eco.interval <= 3600 / 4)
 
 let model = AppModel()
-// Без цього AppModel змінює шкалу ліміту під порожні налаштування тестів, і ChargeControl пише її у файл, який виконує хелпер.
+// Without this, AppModel changes the limit scale to match the tests' empty settings, and ChargeControl writes it to the file the helper enforces.
 model.charge.setPreview(installed: false, status: nil)
 
 check("the schedule follows the setting", model.energyInterval == AppTracking.normal.interval)

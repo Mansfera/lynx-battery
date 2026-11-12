@@ -15,10 +15,10 @@ struct BTDevice: Identifiable, Equatable {
         self.name = name; self.kind = kind; self.main = main; self.left = left; self.right = right; self.caseLevel = caseLevel
     }
 
-    /// Найнижчий рівень — за ним сортуємо й сповіщаємо.
+    /// The lowest level — used for sorting and alerts.
     var lowest: Int? { [main, left, right].compactMap { $0 }.min() }
 
-    /// Дозаповнює порожні рівні з іншого джерела: те саме пристрій часто бачать кілька.
+    /// Fills empty levels from another source: the same device is often seen by several.
     mutating func fill(from o: BTDevice) {
         main = main ?? o.main; left = left ?? o.left; right = right ?? o.right; caseLevel = caseLevel ?? o.caseLevel
         if kind.isEmpty { kind = o.kind }
@@ -42,29 +42,29 @@ struct BTDevice: Identifiable, Equatable {
 }
 
 enum DeviceReader {
-    /// Три джерела: system_profiler (AirPods з L/R/кейсом), джерела живлення-аксесуари (звідти заряд бере Пункт керування,
-    /// AirPods там є навіть без підключення) і реєстр IOKit (BatteryPercent — Magic Keyboard / Trackpad / Mouse на новій macOS).
-    /// system_profiler повільний (~1 с) — викликати лише з фонової черги.
-    /// paired — назви всіх спарених пристроїв (назва → тип), за ними BLE впізнає свої iPhone та iPad.
+    /// Three sources: system_profiler (AirPods with L/R/case), accessory power sources (where Control Center gets the charge,
+    /// AirPods are there even when not connected) and the IOKit registry (BatteryPercent — Magic Keyboard / Trackpad / Mouse on newer macOS).
+    /// system_profiler is slow (~1 s) — call only from a background queue.
+    /// paired — names of all paired devices (name → type), BLE uses them to recognize your own iPhone and iPad.
     static func read() -> (devices: [BTDevice], paired: [String: String]) {
         let (connected, names, paired) = readProfiler()
         var list = connected
         for var d in readPowerSources() + readIORegistry() {
-            // Імʼя користувача («Magic Keyboard volo») беремо з system_profiler за адресою пристрою
+            // The user's name ("Magic Keyboard volo") comes from system_profiler by the device address
             if let addr = d.address, let custom = names[addr] { d.name = custom }
             absorb(d, into: &list)
         }
         return (list.sorted { ($0.lowest ?? 101) < ($1.lowest ?? 101) }, paired)
     }
 
-    /// Той самий пристрій із кількох джерел зливаємо в одну картку.
+    /// The same device from several sources is merged into one card.
     static func absorb(_ d: BTDevice, into list: inout [BTDevice]) {
         if let i = list.firstIndex(where: { $0.name == d.name || $0.name.hasPrefix(d.name) }) { list[i].fill(from: d) }
         else { list.append(d) }
     }
 
-    /// Те саме, що показує `pmset -g accps`. Публічний IOPSCopyPowerSourcesList віддає лише батарею Mac,
-    /// аксесуари — тільки IOPSCopyPowerSourcesByType. Функція приватна, тож dlsym: зникне — просто втратимо це джерело.
+    /// The same as `pmset -g accps` shows. The public IOPSCopyPowerSourcesList returns only the Mac's battery,
+    /// accessories only via IOPSCopyPowerSourcesByType. The function is private, hence dlsym: if it disappears, we simply lose this source.
     private static func readPowerSources() -> [BTDevice] {
         typealias ByType = @convention(c) (Int32) -> Unmanaged<CFTypeRef>?
         guard let sym = dlsym(UnsafeMutableRawPointer(bitPattern: -2), "IOPSCopyPowerSourcesByType") else { return [] } // RTLD_DEFAULT
@@ -72,7 +72,7 @@ enum DeviceReader {
         guard let blob = unsafeBitCast(sym, to: ByType.self)(accessories)?.takeRetainedValue(),
               let sources = IOPSCopyPowerSourcesList(blob)?.takeRetainedValue() as? [CFTypeRef] else { return [] }
 
-        // Кожен навушник і кейс — окреме джерело; збираємо їх в один пристрій
+        // Each earbud and the case is a separate source; gather them into one device
         var out: [String: BTDevice] = [:]
         for src in sources {
             guard let info = IOPSGetPowerSourceDescription(blob, src)?.takeUnretainedValue() as? [String: Any],
@@ -90,7 +90,7 @@ enum DeviceReader {
             case "Case": d.caseLevel = level
             default: d.main = level
             }
-            // Назву й тип беремо з самого пристрою, а не з кейса («AirPods Case»)
+            // Take the name and type from the device itself, not from the case ("AirPods Case")
             if part != "Case" {
                 d.name = name
                 d.kind = info["Accessory Category"] as? String ?? d.kind
@@ -103,7 +103,7 @@ enum DeviceReader {
         return Array(out.values)
     }
 
-    /// ioreg -r -k BatteryPercent -a: HID-пристрої Apple (і не тільки), що звітують заряд.
+    /// ioreg -r -k BatteryPercent -a: Apple HID devices (and others) that report charge.
     private static func readIORegistry() -> [BTDevice] {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/usr/sbin/ioreg")
@@ -128,7 +128,7 @@ enum DeviceReader {
         return out
     }
 
-    /// «aa-bb-cc…» і «AA:BB:CC…» — одна адреса.
+    /// "aa-bb-cc…" and "AA:BB:CC…" are the same address.
     static func normalise(_ a: String?) -> String? {
         guard let a, !a.isEmpty else { return nil }
         return a.lowercased().replacingOccurrences(of: "-", with: ":")
@@ -168,7 +168,7 @@ enum DeviceReader {
                 guard let info = value as? [String: Any] else { continue }
                 if let addr = normalise(info["device_address"] as? String) { names[addr] = name }
                 paired[name] = info["device_minorType"] as? String ?? ""
-                // Показуємо й те, що заряд не звітує: інакше вкладка каже «нічого не підключено», хоч пристрій підключений
+                // Also show what doesn't report charge: otherwise the tab says "nothing connected" even though a device is connected
                 out.append(BTDevice(
                     name: name,
                     kind: info["device_minorType"] as? String ?? "",

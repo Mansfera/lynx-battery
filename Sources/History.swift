@@ -3,8 +3,8 @@ import Foundation
 struct Sample: Codable, Identifiable {
     var t: Date
     var p: Int
-    var c: Bool      // заряджалась
-    var w: Double    // Вт
+    var c: Bool      // was charging
+    var w: Double    // W
     var id: Date { t }
 }
 
@@ -29,7 +29,7 @@ final class HistoryStore {
            let s = try? JSONDecoder().decode([Sample].self, from: data) { samples = s }
     }
 
-    /// Пишемо точку раз на 5 хв або при зміні стану зарядки.
+    /// Write a point every 5 min or when the charging state changes.
     func record(_ b: BatterySnapshot) {
         let now = Date()
         if let last = samples.last, now.timeIntervalSince(last.t) < 300, last.c == b.isCharging, abs(last.p - b.percent) < 2 { return }
@@ -39,7 +39,7 @@ final class HistoryStore {
         if now.timeIntervalSince(lastSaved) > 600 { save() }
     }
 
-    /// Для прев'ю/тестів — без збереження на диск.
+    /// For previews/tests — without saving to disk.
     func appendForPreview(_ s: Sample) { samples.append(s) }
 
     func save() {
@@ -50,13 +50,13 @@ final class HistoryStore {
     func range(_ r: HistoryRange) -> [Sample] {
         let cutoff = Date().addingTimeInterval(-r.seconds)
         let s = samples.filter { $0.t >= cutoff }
-        // На 30 днів — проріджуємо, щоб графік не важчав.
+        // For 30 days, thin out so the chart doesn't get heavy.
         guard s.count > 400 else { return s }
         let step = s.count / 400 + 1
         return s.enumerated().compactMap { $0.offset % step == 0 ? $0.element : nil }
     }
 
-    /// Стовпці для точкової матриці: середній рівень у кожному відрізку часу.
+    /// Columns for the dot matrix: the average level in each time slice.
     func buckets(_ r: HistoryRange, count: Int) -> [(level: Int, charging: Bool)?] {
         let span = r.seconds / Double(count)
         let start = Date().addingTimeInterval(-r.seconds)
@@ -74,13 +74,13 @@ final class HistoryStore {
         return out
     }
 
-    /// Скільки відсотків за годину в середньому тратиться від батареї за проміжок.
+    /// How many percent per hour the battery loses on average over the period.
     func drainPerHour(_ r: HistoryRange) -> Double? {
         let s = range(r)
         var drop = 0.0, time = 0.0
         for (a, b) in zip(s, s.dropFirst()) where !a.c && !b.c && b.p <= a.p {
             let dt = b.t.timeIntervalSince(a.t)
-            guard dt < 3600 else { continue }   // пропускаємо сон
+            guard dt < 3600 else { continue }   // skip sleep
             drop += Double(a.p - b.p); time += dt
         }
         return time > 1800 ? drop / (time / 3600) : nil

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Розбивка потужності в рядку macOS: логіка, живе читання лічильників і PNG. Запуск: Tests/power-breakdown.sh [тека для PNG]. Налаштувань, історії й ліміту заряду справжньої апки не чіпає.
+# Power breakdown in the macOS row: logic, live counter reading and PNG. Run: Tests/power-breakdown.sh [PNG folder]. Doesn't touch the real app's settings, history or charge limit.
 set -e
 cd "$(dirname "$0")/.."
 OUT="${1:-build/power-breakdown}"

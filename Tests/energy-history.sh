@@ -1,5 +1,5 @@
 #!/bin/bash
-# Неможливі показники «top» не псують «енергію за апками». Запуск: Tests/energy-history.sh. Працює на файлі в тимчасовій теці, справжньої energy.json не чіпає.
+# Impossible "top" readings don't corrupt "energy by app". Run: Tests/energy-history.sh. Works on a file in a temp folder, doesn't touch the real energy.json.
 set -e
 cd "$(dirname "$0")/.."
 TMP="$(mktemp -d)"

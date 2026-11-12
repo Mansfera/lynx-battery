@@ -1,5 +1,5 @@
 #!/bin/bash
-# ПКМ по іконці: коли перемикає енергозбереження, а коли відкриває поповер, плюс PNG налаштувань. Запуск: Tests/right-click.sh [тека для PNG]. Налаштувань і хелпера справжньої апки не чіпає.
+# Right-click on the icon: when it toggles Low Power and when it opens the popover, plus a PNG of the settings. Run: Tests/right-click.sh [PNG folder]. Doesn't touch the real app's settings or helper.
 set -e
 cd "$(dirname "$0")/.."
 OUT="${1:-build/right-click}"

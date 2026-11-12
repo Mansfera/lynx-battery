@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-// ПКМ по іконці не повинен просити пароль: перемикає енергозбереження лише з увімкненим налаштуванням і живим хелпером.
+// Right-click on the icon must not ask for a password: it toggles Low Power only with the setting on and a live helper.
 
 let out = URL(fileURLWithPath: CommandLine.arguments[1], isDirectory: true)
 let fonts = URL(fileURLWithPath: CommandLine.arguments[2], isDirectory: true)
@@ -31,7 +31,7 @@ func render<V: View>(_ view: V, _ name: String, width: CGFloat) {
 
 Brand.registerFonts(in: fonts)
 
-// cfprefsd пам'ятає домен тесту між запусками, навіть коли plist уже видалено
+// cfprefsd remembers the test domain between runs, even when the plist is already deleted
 UserDefaults.standard.removeObject(forKey: "rightClickLowPower")
 let s = Settings.shared
 let model = AppModel()

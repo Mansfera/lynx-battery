@@ -7,51 +7,51 @@ struct BatterySnapshot: Equatable {
     var isCharging: Bool
     var onAC: Bool
     var fullyCharged: Bool
-    var minutes: Int?          // до розряду або до повного
-    var watts: Double          // >0 — у батарею, <0 — з батареї
+    var minutes: Int?          // until empty or until full
+    var watts: Double          // >0 — into the battery, <0 — out of the battery
     var adapterWatts: Int?
     var cycles: Int
     var designCycles: Int
-    var designCapacity: Int    // мА·год
-    var fullCapacity: Int      // мА·год, поточна повна ємність
+    var designCapacity: Int    // mAh
+    var fullCapacity: Int      // mAh, current full capacity
     var temperature: Double?
-    var systemWatts: Double    // скільки споживає сам Mac
-    var inputWatts: Double     // скільки зараз іде від адаптера
+    var systemWatts: Double    // how much the Mac itself draws
+    var inputWatts: Double     // how much is coming from the adapter right now
     var lowPower: Bool
-    /// Те, що показує macOS (CurrentCapacity) — для порівняння з нашим числом.
+    /// What macOS shows (CurrentCapacity) — for comparison with our number.
     var macPercent: Int = 0
-    /// Заряд відносно ємності нової батареї: справжній заряд × здоров'я, тож 100 % при здоров'ї 90 % → 90 %.
+    /// Charge relative to a new battery's capacity: true charge × health, so 100 % at 90 % health → 90 %.
     var designPercent: Int = 0
-    /// Скільки покаже designPercent на повному заряді — те саме число, що health, і стеля ліміту в цьому режимі.
+    /// What designPercent shows at full charge — the same number as health, and the limit ceiling in this mode.
     var designTop: Int = 100
-    /// Стеля числа percent у вибраному режимі: його ставить апка разом із percent. У сирому знімку хелпера лишається 100.
+    /// Ceiling of percent in the chosen mode: the app sets it along with percent. In the helper's raw snapshot it stays 100.
     var percentTop: Int = 100
-    /// AppleRawMaxCapacity: скільки мА·год батарея вміщає зараз. Від неї і здоров'я, і заряд, тож відсоток сходиться з мА·год.
+    /// AppleRawMaxCapacity: how many mAh the battery holds now. Both health and charge derive from it, so the percentage agrees with mAh.
     var usableCapacity: Int = 0
 
-    /// Поріг вище стелі число не досягне ніколи, тож для нього «досягнуто» означає справді повну батарею.
+    /// The number never reaches a threshold above the ceiling, so for it "reached" means a truly full battery.
     func reachedHigh(_ threshold: Int) -> Bool { threshold > percentTop ? fullyCharged : percent >= threshold }
 
-    /// Підключено, але батарея сідає. Причин багато: щойно підключили, заряд тримає ліміт або сама macOS.
+    /// Plugged in, but the battery is draining. Many reasons: just plugged in, the limit is holding the charge, or macOS itself.
     var drainingOnAC: Bool { onAC && !isCharging && watts < -1.5 }
 
-    /// Зарядка не тягне: Mac споживає майже все, що дає адаптер. Потужність невідома — вважаємо, що так.
+    /// The charger can't keep up: the Mac draws almost everything the adapter gives. Wattage unknown — assume so.
     var underpowered: Bool { drainingOnAC && adapterWatts.map { systemWatts >= Double($0) * 0.8 } ?? true }
 
-    /// underpowered, що протрималось довше, ніж адаптер домовляється про потужність. Ставить апка (WeakChargerTracker).
+    /// underpowered that has lasted longer than the adapter takes to negotiate power. Set by the app (WeakChargerTracker).
     var chargerTooWeak = false
 
-    /// Куди йде живлення. На адаптері все рахуємо від входу: Mac отримує те, що лишилося після батареї
-    /// (разом із втратами зарядки всередині Mac), тож потоки завжди дорівнюють входу, а не трьом окремим замірам.
+    /// Where the power goes. On the adapter everything is computed from the input: the Mac gets what's left after the battery
+    /// (including charging losses inside the Mac), so the flows always add up to the input rather than three separate readings.
     var flow: PowerFlow {
-        // Без адаптера Mac живе лише від батареї, навіть якщо струм ще не оновився (буває до хвилини): тоді рахує споживання Mac
+        // Without an adapter the Mac runs only on battery, even if the current hasn't updated yet (can take up to a minute): then it counts the Mac's draw
         guard onAC else { return PowerFlow(toBattery: 0, adapterToMac: 0, batteryToMac: systemWatts > 0 ? systemWatts : max(0, -watts)) }
         let toBattery = isCharging ? max(0, watts) : 0
         let input = max(inputWatts, toBattery)
         return PowerFlow(toBattery: toBattery, adapterToMac: input - toBattery, batteryToMac: max(0, -watts))
     }
 
-    /// На батареї потік показує те саме споживання, що й розбивка під ним, коли вона відкрита: обидва з PSTR, але з різним усередненням
+    /// On battery the flow shows the same draw as the breakdown below it when that's open: both come from PSTR, but with different averaging
     func drawing(_ macWatts: Double?) -> BatterySnapshot {
         guard !onAC, let macWatts else { return self }
         var b = self
@@ -61,7 +61,7 @@ struct BatterySnapshot: Equatable {
 
     var needsService: Bool { health > 0 && (health < 80 || cycles >= designCycles) }
 
-    /// Ємність, від якої рахуємо здоров'я: те, що батарея вміщає зараз, а без неї — номінальна.
+    /// Capacity health is computed from: what the battery holds now, or the design capacity without it.
     var healthCapacity: Int { usableCapacity > 0 ? usableCapacity : fullCapacity }
 
     var health: Int {
@@ -69,7 +69,7 @@ struct BatterySnapshot: Equatable {
         return min(100, Int((Double(healthCapacity) / Double(designCapacity) * 100).rounded()))
     }
 
-    /// target — куди заряджаємось: ліміт або стеля режиму. До повного — лише час; до ліміту — час до нього й до повного.
+    /// target — where we're charging to: the limit or the mode ceiling. To full — just the time; to the limit — time to it and to full.
     var statusLine: String { statusLine(target: percentTop) }
 
     func statusLine(target: Int) -> String {
@@ -106,39 +106,39 @@ struct PowerFlow: Equatable {
     var adapterToMac: Double
     var batteryToMac: Double
     var total: Double { toBattery + adapterToMac + batteryToMac }
-    /// Сума тих чисел, що на стрічках: підписи й «W total» не розходяться через округлення
+    /// Sum of the numbers shown on the bands: labels and "W total" don't diverge due to rounding
     var shownTotal: Double { [toBattery, adapterToMac, batteryToMac].reduce(0) { $0 + ($1 * 10).rounded() / 10 } }
 }
 
-/// Які високі пороги вже спрацювали: кожен сповіщає один раз, поки заряд не впаде нижче нього.
+/// Which high thresholds have already fired: each alerts once until the charge drops below it.
 struct HighAlertTracker {
     private(set) var fired: Set<Int> = []
 
-    /// Старт: вважаємо вже пройденими пороги, за якими ми зараз стоїмо, щоб не спамити.
+    /// Start: treat thresholds we're already past as fired, so we don't spam.
     mutating func start(_ thresholds: Set<Int>, _ b: BatterySnapshot) {
         fired = thresholds.filter { b.reachedHigh($0) }
     }
 
-    /// Поріг, про який треба сповістити зараз: спрацьовує лише при зарядці, найвищий із досягнутих.
+    /// The threshold to alert about now: fires only while charging, the highest one reached.
     mutating func update(_ thresholds: Set<Int>, _ b: BatterySnapshot) -> Int? {
         var hit: Int?
         if b.onAC, let t = thresholds.sorted(by: >).first(where: { b.reachedHigh($0) && !fired.contains($0) }) {
             fired.formUnion(thresholds.filter { $0 <= t })
             hit = t
         }
-        // Поріг вище стелі скидаємо відносно стелі: інакше він скинувся б одразу й сповіщав щоразу
+        // A threshold above the ceiling is reset relative to the ceiling: otherwise it would reset immediately and alert every time
         fired = fired.filter { b.percent >= min($0, b.percentTop) - 2 }
         return hit
     }
 
-    /// Поріг вище стелі досягається лише на повній батареї, тож і заголовок той самий, що для 100.
+    /// A threshold above the ceiling is reached only on a full battery, so the title is the same as for 100.
     static func title(_ threshold: Int, _ b: BatterySnapshot) -> String {
         threshold >= 100 || threshold > b.percentTop ? "Fully charged" : "Charged to \(b.percent)%"
     }
 }
 
-/// USB-C PD блок після підключення домовляється про потужність сходинками (5 → 15 → повна) кілька секунд,
-/// а macOS ще трохи оновлює AdapterDetails: слабким вважаємо лише той, що не тягне довше за settle.
+/// After plugging in, a USB-C PD brick negotiates power in steps (5 → 15 → full) over a few seconds,
+/// and macOS takes a bit longer to update AdapterDetails: only one that can't keep up for longer than settle counts as weak.
 struct WeakChargerTracker {
     static let settle: TimeInterval = 30
     private(set) var since: Date?
@@ -157,12 +157,12 @@ func formatMinutes(_ m: Int) -> String {
     return mm == 0 ? "\(h) h" : "\(h) h \(mm) min"
 }
 
-/// Один порт живлення: що на ньому підключено, з IOKit. Транспорти — "CC", "USB2", "USB3", "CIO" (Thunderbolt), "DisplayPort".
+/// One power port: what's connected to it, from IOKit. Transports — "CC", "USB2", "USB3", "CIO" (Thunderbolt), "DisplayPort".
 struct PowerPort: Equatable {
     var connected: Bool
     var transports: Set<String>
 
-    /// Монітор чи док. Лише USB2 не рахуємо: так виглядає й YubiKey, а якому порту належить живлення, IOKit не каже ("Power In" завжди No).
+    /// A monitor or dock. USB2 alone doesn't count: a YubiKey looks the same, and IOKit doesn't say which port the power belongs to ("Power In" is always No).
     var carriesDevices: Bool { !transports.isDisjoint(with: ["DisplayPort", "CIO", "USB3"]) }
     var carriesData: Bool { !transports.subtracting(["CC"]).isEmpty }
 }
@@ -176,7 +176,7 @@ enum BatteryReader {
         guard IORegistryEntryCreateCFProperties(service, &props, kCFAllocatorDefault, 0) == KERN_SUCCESS,
               let d = props?.takeRetainedValue() as? [String: Any] else { return nil }
 
-        // iMac, Mac mini, Studio: служба є, але батареї немає — тоді рахуємо, що її нема зовсім
+        // iMac, Mac mini, Studio: the service exists but there's no battery — then treat it as having none at all
         if (d["BatteryInstalled"] as? NSNumber)?.boolValue == false { return nil }
         let bd = d["BatteryData"] as? [String: Any] ?? [:]
         let design0 = ((d["DesignCapacity"] ?? bd["DesignCapacity"]) as? NSNumber)?.intValue ?? 0
@@ -187,12 +187,12 @@ enum BatteryReader {
         }
         func flag(_ k: String) -> Bool { (d[k] as? NSNumber)?.boolValue ?? false }
 
-        // CurrentCapacity — згладжений «UI SoC» контролера: на macOS 27 він розходиться з меню-баром
-        // на кілька відсотків (99 проти 95). Рахуємо, як система: залишок / повна ємність.
+        // CurrentCapacity is the controller's smoothed "UI SoC": on macOS 27 it differs from the menu bar
+        // by a few percent (99 vs 95). We compute it like the system does: remaining / full capacity.
         let cur = num("CurrentCapacity") ?? 0
         let max = num("MaxCapacity") ?? 100
         var percent = max > 0 ? Int((Double(cur) / Double(max) * 100).rounded()) : cur
-        // У BatteryData цих полів може не бути (macOS 15): тоді мА·год беремо з AppleRaw*, інакше всі режими показують те саме
+        // BatteryData may lack these fields (macOS 15): then take mAh from AppleRaw*, otherwise all modes show the same thing
         let rem = ((bd["RemainingCapacity"] ?? d["AppleRawCurrentCapacity"]) as? NSNumber)?.doubleValue
         let full = ((bd["FullChargeCapacity"] ?? d["AppleRawMaxCapacity"]) as? NSNumber)?.doubleValue
         if let rem, let full, full > 0, rem > 0 {
@@ -200,7 +200,7 @@ enum BatteryReader {
         }
         if flag("FullyCharged") { percent = 100 }
         let macPercent = max > 0 ? Int((Double(cur) / Double(max) * 100).rounded()) : cur
-        // Здоров'я і заряд рахуємо від тієї ж робочої ємності (AppleRawMaxCapacity), тож повна батарея дає рівно своє Health
+        // Health and charge are computed from the same working capacity (AppleRawMaxCapacity), so a full battery gives exactly its Health
         let fullCapacity = num("NominalChargeCapacity") ?? num("AppleRawMaxCapacity") ?? 0
         let usable = num("AppleRawMaxCapacity") ?? fullCapacity
         var designPercent = percent
@@ -214,10 +214,10 @@ enum BatteryReader {
         let ac = flag("ExternalConnected")
         var mA = Double(num("InstantAmperage") ?? num("Amperage") ?? 0)
         var liveInput: Double?
-        // AppleSmartBattery оновлює ці поля раз на хвилину, а заряд починається й зупиняється за секунди
+        // AppleSmartBattery updates these fields once a minute, while charging starts and stops within seconds
         if ac, !flag("FullyCharged"), let current = SMC.shared.chargeCurrent() {
             (charging, mA) = liveCharge(current: current, amperage: mA)
-            // Вхід — з того самого моменту, що й струм: хвилинний PowerTelemetryData із живим струмом не сходиться
+            // Input from the same moment as the current: the per-minute PowerTelemetryData doesn't agree with the live current
             liveInput = SMC.shared.read("PDTR").flatMap { $0.isFinite && $0 > 0 && $0 < 1000 ? $0 : nil }
         }
 
@@ -265,12 +265,12 @@ enum BatteryReader {
         )
     }
 
-    /// Живий струм важливіший за останнє прочитане: є струм — заряджається; немає — зарядний струм із ioreg уже застарів, а розряд лишаємо.
+    /// The live current beats the last reading: current flowing — charging; none — the charge current from ioreg is stale, but discharge stays.
     static func liveCharge(current: Int, amperage: Double) -> (charging: Bool, mA: Double) {
         current > 0 ? (true, Double(current)) : (false, min(0, amperage))
     }
 
-    /// Що зараз на портах. Властивості читаються без root; порожньо там, де таких портів немає.
+    /// What's on the ports now. The properties are readable without root; empty where there are no such ports.
     static func powerPorts() -> [PowerPort] {
         var ports: [PowerPort] = []
         for cls in ["AppleHPMInterfaceType10", "AppleHPMInterfaceType11"] {
@@ -287,7 +287,7 @@ enum BatteryReader {
         return ports
     }
 
-    /// Миттєві оновлення при підключенні/відключенні зарядки.
+    /// Instant updates when the charger is plugged in/unplugged.
     static func observe(_ handler: @escaping () -> Void) {
         let box = Unmanaged.passRetained(HandlerBox(handler)).toOpaque()
         guard let src = IOPSNotificationCreateRunLoopSource({ ctx in
@@ -301,7 +301,7 @@ enum BatteryReader {
 }
 
 enum LowPowerMode {
-    /// pmset потребує прав адміністратора — macOS сама попросить пароль.
+    /// pmset needs admin rights — macOS asks for the password itself.
     static func set(_ on: Bool, completion: @escaping (Bool) -> Void) {
         DispatchQueue.global().async {
             let src = "do shell script \"/usr/bin/pmset -a lowpowermode \(on ? 1 : 0)\" with administrator privileges"

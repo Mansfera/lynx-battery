@@ -1,7 +1,7 @@
 import Foundation
 
-// Перевірка оновлень: порівняння версій, розбір відповіді GitHub, коли показувати банер і сповіщення.
-// Лише чиста логіка: без мережі, без Settings і без UserDefaults.
+// Update check: version comparison, parsing the GitHub response, when to show the banner and the alert.
+// Pure logic only: no network, no Settings and no UserDefaults.
 
 var failures = 0
 func check<T: Equatable>(_ name: String, _ got: T, _ want: T) {
@@ -10,7 +10,7 @@ func check<T: Equatable>(_ name: String, _ got: T, _ want: T) {
     print("\(ok ? "ok  " : "FAIL") \(name)\(ok ? "" : ": got \(got), want \(want)")")
 }
 
-// Версії
+// Versions
 check("1.10.0 is newer than 1.9.0", UpdatePolicy.isNewer("1.10.0", than: "1.9.0"), true)
 check("1.9.0 isn't newer than 1.10.0", UpdatePolicy.isNewer("1.9.0", than: "1.10.0"), false)
 check("v prefix is ignored", UpdatePolicy.isNewer("v1.1.6", than: "1.1.5"), true)
@@ -25,7 +25,7 @@ check("garbage isn't newer", UpdatePolicy.isNewer("latest", than: "1.1.5"), fals
 check("garbage current never alerts", UpdatePolicy.isNewer("9.9.9", than: ""), false)
 check("prerelease sorts below its release", AppVersion("1.2.0-rc1")! < AppVersion("1.2.0")!, true)
 
-// Розбір відповіді
+// Response parsing
 func json(tag: String, draft: Bool = false, pre: Bool = false, assets: String = "[]") -> Data {
     """
     {"tag_name":"\(tag)","html_url":"https://github.com/Mansfera/lynx-battery/releases/tag/\(tag)",
@@ -50,7 +50,7 @@ check("no assets is fine", UpdatePolicy.parse(json(tag: "1.3.0"))?.dmgURL == nil
 check("an error body isn't a release", UpdatePolicy.parse(#"{"message":"Not Found"}"#.data(using: .utf8)!) == nil, true)
 check("junk isn't a release", UpdatePolicy.parse(Data("<html>".utf8)) == nil, true)
 
-// Банер і сповіщення
+// Banner and alert
 let rel = r!
 check("banner for a newer version", UpdatePolicy.showBanner(rel, current: "1.1.5", checkOn: true, dismissed: nil), true)
 check("no banner with checks off", UpdatePolicy.showBanner(rel, current: "1.1.5", checkOn: false, dismissed: nil), false)
@@ -68,7 +68,7 @@ check("no alert with checks off", UpdatePolicy.shouldAlert(rel, current: "1.1.5"
 check("no alert when up to date", UpdatePolicy.shouldAlert(rel, current: "1.2.0", checkOn: true, alertsOn: true, alerted: nil), false)
 check("no alert when ahead (dev build)", UpdatePolicy.shouldAlert(rel, current: "1.3.0", checkOn: true, alertsOn: true, alerted: nil), false)
 
-// Коли питати GitHub
+// When to ask GitHub
 let now = Date(timeIntervalSince1970: 1_800_000_000)
 check("due on first run", UpdatePolicy.isDue(lastCheck: nil, now: now), true)
 check("not due an hour later", UpdatePolicy.isDue(lastCheck: now - 3600, now: now), false)

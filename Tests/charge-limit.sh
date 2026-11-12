@@ -1,5 +1,5 @@
 #!/bin/bash
-# Межі ліміту заряду й переведення між шкалами. Запуск: Tests/charge-limit.sh. Налаштувань справжньої апки не чіпає.
+# Charge limit bounds and conversion between scales. Run: Tests/charge-limit.sh. Doesn't touch the real app's settings.
 set -e
 cd "$(dirname "$0")/.."
 TMP="$(mktemp -d)"

@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-// Перемикач «Track devices»: що зупиняється, коли вимкнено, і що вертається без перезапуску, плюс PNG. Запуск: Tests/device-tracking.sh
+// The "Track devices" toggle: what stops when it's off and what comes back without a restart, plus PNGs. Run: Tests/device-tracking.sh
 
 let out = URL(fileURLWithPath: CommandLine.arguments[1], isDirectory: true)
 let fonts = URL(fileURLWithPath: CommandLine.arguments[2], isDirectory: true)
@@ -41,8 +41,8 @@ func childCount(named name: String) -> Int {
     return String(decoding: data, as: UTF8.self).split(separator: "\n").count
 }
 
-/// Чи прочитала модель пристрої за кілька секунд. system_profiler працює ~0,1 с, процес легко проґавити,
-/// тож дивимось на список спарених, який кожне читання переписує.
+/// Whether the model read the devices within a few seconds. system_profiler runs ~0.1 s, the process is easy to miss,
+/// so we look at the paired list, which every read rewrites.
 func readsDevices(_ model: AppModel, within seconds: TimeInterval = 3) -> Bool {
     model.ble.paired = ["sentinel": ""]
     let end = Date().addingTimeInterval(seconds)
@@ -58,7 +58,7 @@ NSApp.setActivationPolicy(.prohibited)
 Brand.registerFonts(in: fonts)
 try? FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
 
-// CFFIXED_USER_HOME переносить файли даних, але не налаштування: вони живуть у справжньому ~/Library/Preferences під назвою цієї програми
+// CFFIXED_USER_HOME relocates data files but not preferences: they live in the real ~/Library/Preferences under this program's name
 let testDefaults = ProcessInfo.processInfo.processName
 UserDefaults.standard.removePersistentDomain(forName: testDefaults)
 
@@ -66,10 +66,10 @@ check("on by default", Settings.shared.trackDevices)
 Settings.shared.trackDevices = false
 
 let model = AppModel()
-// Без цього AppModel змінює шкалу ліміту під порожні налаштування тестів, і ChargeControl пише її у файл, який виконує хелпер.
+// Without this, AppModel changes the limit scale to match the tests' empty settings, and ChargeControl writes it to the file the helper enforces.
 model.charge.setPreview(installed: false, status: nil)
 
-// CoreBluetooth без дозволу в Info.plist валить процес, тож сам старт уже перевіряє, що Bluetooth не чіпаємо
+// CoreBluetooth without permission in Info.plist kills the process, so the startup itself already checks that Bluetooth isn't touched
 model.start()
 check("Bluetooth stays off", model.ble.state == .unknown)
 check("no Devices tab", !model.tabs.contains(.devices))
@@ -84,7 +84,7 @@ render(PopoverView(model: model), "popover-tracking-off")
 render(AlertSettings(model: model), "settings-alerts-tracking-off", width: 480)
 model.popoverShown = false
 
-// Без дозволу вмикання теж не чіпає Bluetooth, поки не відкрито Devices: інакше тут процес упаде
+// Without permission, turning it on doesn't touch Bluetooth either until Devices is opened: otherwise the process would crash here
 if !model.ble.authorized {
     Settings.shared.trackDevices = true
     check("on again: devices are read without relaunch", readsDevices(model))

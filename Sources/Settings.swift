@@ -1,7 +1,7 @@
 import Foundation
 import ServiceManagement
 
-/// Який відсоток показувати.
+/// Which percentage to show.
 enum PercentMode: String, CaseIterable, Identifiable {
     case macOS = "As macOS shows"
     case trueCharge = "True charge"
@@ -38,7 +38,7 @@ enum IconStyle: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
-/// Як часто міряти енергію по апках. Кожен замір — запуск top на ~1 с, тож рідше — дешевше.
+/// How often to measure per-app energy. Each sample runs top for ~1 s, so less often is cheaper.
 enum AppTracking: String, CaseIterable, Identifiable {
     case frequent = "Frequent"
     case normal = "Normal"
@@ -61,8 +61,8 @@ enum AppTracking: String, CaseIterable, Identifiable {
 }
 
 struct DeviceRule: Codable, Equatable {
-    var low: Int = 15          // 0 = не сповіщати
-    var full: Bool = false     // сповістити, коли зарядився до 100%
+    var low: Int = 15          // 0 = don't alert
+    var full: Bool = false     // alert when charged to 100%
     var hidden: Bool = false
 }
 
@@ -76,8 +76,8 @@ final class Settings: ObservableObject {
     @Published var highAlerts: Set<Int> { didSet { d.set(Array(highAlerts), forKey: "high") } }
     @Published var onPlug: Bool { didSet { d.set(onPlug, forKey: "plug") } }
     @Published var onUnplug: Bool { didSet { d.set(onUnplug, forKey: "unplug") } }
-    @Published var fullScreenAt: Int { didSet { d.set(fullScreenAt, forKey: "fullscreen") } }   // 0 = вимкнено
-    @Published var deviceLowAt: Int { didSet { d.set(deviceLowAt, forKey: "deviceLow") } }     // 0 = вимкнено
+    @Published var fullScreenAt: Int { didSet { d.set(fullScreenAt, forKey: "fullscreen") } }   // 0 = off
+    @Published var deviceLowAt: Int { didSet { d.set(deviceLowAt, forKey: "deviceLow") } }     // 0 = off
     @Published var glow: Bool { didSet { d.set(glow, forKey: "glow") } }
     @Published var sound: String { didSet { d.set(sound, forKey: "sound") } }
     @Published var iconStyle: IconStyle { didSet { d.set(iconStyle.rawValue, forKey: "icon") } }
@@ -89,28 +89,28 @@ final class Settings: ObservableObject {
     }
     @Published var smartColors: Bool { didSet { d.set(smartColors, forKey: "colors") } }
     @Published var percentMode: PercentMode { didSet { d.set(percentMode.rawValue, forKey: "percentMode") } }
-    /// Лише для режиму «Of original capacity»: задавати ліміт у справжньому заряді, 0–100 %.
+    /// Only for the "Of original capacity" mode: set the limit in true charge, 0–100 %.
     @Published var limitTrueCharge: Bool { didSet { d.set(limitTrueCharge, forKey: "limitTrueCharge") } }
     var limitScale: ChargeScale { percentMode == .ofDesign && limitTrueCharge ? .trueCharge : percentMode.chargeScale }
     @Published var animateCharging: Bool { didSet { d.set(animateCharging, forKey: "animate") } }
     @Published var persistent: Bool { didSet { d.set(persistent, forKey: "persistent") } }
     @Published var heatAlert: Bool { didSet { d.set(heatAlert, forKey: "heat") } }
-    /// ПКМ по іконці перемикає енергозбереження. Працює лише з хелпером, бо він не просить пароля.
+    /// Right-click on the icon toggles Low Power. Works only with the helper, since it doesn't ask for a password.
     @Published var rightClickLowPower: Bool { didSet { d.set(rightClickLowPower, forKey: "rightClickLowPower") } }
     @Published var appTracking: AppTracking { didSet { d.set(appTracking.rawValue, forKey: "appTracking") } }
-    /// Поки відкрита вкладка Power, потужність і енергія по апках оновлюються частіше.
+    /// While the Power tab is open, wattage and per-app energy update more often.
     @Published var livePowerTab: Bool { didSet { d.set(livePowerTab, forKey: "livePowerTab") } }
-    /// Мінімальний режим не вимикає заміри по апках, а переводить їх на найрідший крок.
+    /// Minimal mode doesn't turn off per-app samples, it moves them to the slowest step.
     var effectiveAppTracking: AppTracking { minimalEnergy ? .eco : appTracking }
-    /// Мінімум енергії: енергія по апках у режимі Eco, без анімацій і Bluetooth, решта читається рідше. Ліміт заряду й сповіщення лишаються.
+    /// Minimum energy: per-app energy in Eco mode, no animations or Bluetooth, everything else read less often. The charge limit and alerts stay.
     @Published var minimalEnergy: Bool { didSet { d.set(minimalEnergy, forKey: "minimalEnergy") } }
-    /// Вимкнено — ні вкладки Devices, ні опитування пристроїв, ні Bluetooth, ні їхніх сповіщень.
+    /// Off — no Devices tab, no device polling, no Bluetooth, no device alerts.
     @Published var trackDevices: Bool { didSet { d.set(trackDevices, forKey: "trackDevices") } }
-    /// Раз на кілька годин питати GitHub про нову версію й показувати банер у поповері.
+    /// Every few hours ask GitHub about a new version and show a banner in the popover.
     @Published var updateCheck: Bool { didSet { d.set(updateCheck, forKey: "updateCheck") } }
-    /// Сповіщення-пігулка про нову версію; висить, доки не клацнуть або не закриють.
+    /// Pill alert about a new version; stays until clicked or closed.
     @Published var updateAlert: Bool { didSet { d.set(updateAlert, forKey: "updateAlert") } }
-    /// Самому завантажити, перевірити підпис і замінити апку. З хелпером — без пароля.
+    /// Download, verify the signature and replace the app automatically. With the helper — no password.
     @Published var autoInstall: Bool { didSet { d.set(autoInstall, forKey: "autoInstall") } }
     @Published var deviceRules: [String: DeviceRule] {
         didSet { d.set(try? JSONEncoder().encode(deviceRules), forKey: "deviceRules") }
@@ -130,7 +130,7 @@ final class Settings: ObservableObject {
         }
     }
 
-    /// Автозапуск могли вимкнути в System Settings, поки апка працювала.
+    /// Launch at login may have been turned off in System Settings while the app was running.
     func syncLaunchAtLogin() {
         let on = SMAppService.mainApp.status == .enabled
         if launchAtLogin != on { launchAtLogin = on }

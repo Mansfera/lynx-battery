@@ -2,8 +2,8 @@ import AppKit
 import SwiftUI
 import CoreText
 
-/// Система etherlynx.xyz / volodymyr.buzz: білий фон, Ink, небесна сцена (sky), Onest.
-/// Червоний — лише функціональний: мало заряду.
+/// The etherlynx.xyz / volodymyr.buzz system: white background, Ink, sky scene, Onest.
+/// Red is functional only: low charge.
 enum Brand {
     static let ink = Color(hex: 0x0E0E10)
     static let ink2 = Color(hex: 0x3A3D45)
@@ -31,7 +31,7 @@ enum Brand {
         }
     }
 
-    /// Великі цифри й заголовки: Onest medium, тісно, як заголовки на сайті.
+    /// Large numbers and headings: Onest medium, tight, like the headings on the site.
     static func display(_ size: CGFloat, weight: Font.Weight = .medium) -> Font {
         .custom("Onest", size: size).weight(weight)
     }
@@ -50,7 +50,7 @@ enum Brand {
     }
 }
 
-/// Кольори світлої й темної теми — ті самі токени, що й на сайті.
+/// Light and dark theme colors — the same tokens as on the site.
 struct Palette {
     let scheme: ColorScheme
     var dark: Bool { scheme == .dark }
@@ -60,8 +60,8 @@ struct Palette {
     var fg: Color { dark ? .white : Brand.ink }
     var line: Color { dark ? .white.opacity(0.1) : Brand.ink.opacity(0.12) }
     var muted: Color { dark ? Color.white.opacity(0.55) : Brand.muted }
-    /// Стан батареї кольором, як на iPhone: заряджається — зелений, енергозбереження — жовтий,
-    /// від розетки без заряду — синій, мало — червоний. Узгоджено з іконкою в меню-барі.
+    /// Battery state by color, like on iPhone: charging — green, Low Power — yellow,
+    /// on wall power without charging — blue, low — red. Matches the menu bar icon.
     var charging: Color { Color(nsColor: .systemGreen) }
     func state(_ b: BatterySnapshot) -> Color {
         if b.isCharging { return Color(nsColor: .systemGreen) }
@@ -70,15 +70,15 @@ struct Palette {
         if b.onAC { return Color(nsColor: .systemBlue) }
         return fg
     }
-    /// Колір увімкненого перемикача: білий трек у темній темі ховає білий повзунок.
+    /// Color of an enabled toggle: a white track in the dark theme hides the white knob.
     var toggleTint: Color { dark ? Brand.mist : Brand.ink }
-    /// Заряд: звичайний — Ink, мало — червоний, зарядка — slate.
+    /// Charge: normal — Ink, low — red, charging — slate.
     func level(_ p: Int, charging isCharging: Bool = false) -> Color {
         if isCharging { return charging }
         if p <= 20 { return Brand.signal }
         return fg
     }
-    /// Небесна сцена: вертикальний sky-градієнт, у темній — темна радіальна, як .obj на сайті.
+    /// Sky scene: vertical sky gradient, in dark theme a dark radial one, like .obj on the site.
     @ViewBuilder var stage: some View {
         if dark {
             RadialGradient(colors: [Color(hex: 0x2A2D35), Color(hex: 0x0E0E10)], center: .bottom, startRadius: 0, endRadius: 360)
@@ -100,7 +100,7 @@ extension NSColor {
     }
 }
 
-/// Рись із комірок батареї (Marks/lynx-ink.svg), той самий рисунок, що й значок апки.
+/// Lynx made of battery cells (Marks/lynx-ink.svg), the same drawing as the app icon.
 struct LynxMark: View {
     var body: some View {
         if let url = Bundle.main.url(forResource: "lynx-ink", withExtension: "svg", subdirectory: "Marks"),
@@ -110,14 +110,14 @@ struct LynxMark: View {
     }
 }
 
-/// Кнопка-пігулка з сайту: Ink, білий текст, біле коло зі стрілкою праворуч.
+/// Pill button from the site: Ink, white text, a white circle with an arrow on the right.
 struct InkPill: View {
     let title: String
     var symbol: String = "arrow.right"
     let action: () -> Void
     @Environment(\.colorScheme) private var scheme
     var body: some View {
-        // На темному тлі пігулка інвертується: біла з Ink-колом (як on-dark на сайті)
+        // On a dark background the pill inverts: white with an Ink circle (like on-dark on the site)
         let fill: Color = scheme == .dark ? .white : Brand.ink
         let ink: Color = scheme == .dark ? Brand.ink : .white
         Button(action: action) {

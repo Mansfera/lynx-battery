@@ -1,6 +1,6 @@
 import Foundation
 
-// Неможливі показники POWER. Історія лише у тимчасовому файлі: справжню energy.json не чіпає.
+// Impossible POWER readings. History only in a temp file: doesn't touch the real energy.json.
 
 var failures = 0
 func check<T: Equatable>(_ name: String, _ got: T, _ want: T) {
@@ -13,7 +13,7 @@ func rounded(_ v: Double?) -> Double? { v.map { ($0 * 100).rounded() / 100 } }
 let dir = URL(fileURLWithPath: CommandLine.arguments[1], isDirectory: true)
 var fileCount = 0
 
-/// Монітор із файлу в тому самому форматі, що й справжній: секунди від 2001-го. hoursAgo — щоб години не випали за 30 днів.
+/// A monitor from a file in the same format as the real one: seconds since 2001. hoursAgo — so the hours don't fall outside 30 days.
 func monitor(_ hours: [(hoursAgo: Double, totals: [String: Double], n: Int)]) -> (EnergyMonitor, URL) {
     fileCount += 1
     let url = dir.appendingPathComponent("energy-\(fileCount).json")
@@ -23,10 +23,10 @@ func monitor(_ hours: [(hoursAgo: Double, totals: [String: Double], n: Int)]) ->
     try! JSONSerialization.data(withJSONObject: rows).write(to: url)
     return (EnergyMonitor(url: url), url)
 }
-/// pid −1 не має шляху, тож апкою стає сама назва процесу.
+/// pid −1 has no path, so the process name itself becomes the app.
 func reading(_ cmd: String, _ power: Double) -> (pid: Int32, cmd: String, power: Double) { (-1, cmd, power) }
 
-// Те, що лежало на справжньому Mac: година з 228990593.5 поруч із нормальними
+// What was on a real Mac: an hour with 228990593.5 next to normal ones
 let realHours: [(hoursAgo: Double, totals: [String: Double], n: Int)] = [
     (5, ["macOS": 3835.3], 30),
     (4, ["macOS": 228990593.5, "Safari": 120], 12),
@@ -88,7 +88,7 @@ do {
 }
 
 do {
-    // Із inf у сумах JSONEncoder падає, і save() мовчки не писав би нічого
+    // With inf in the sums JSONEncoder fails, and save() would silently write nothing
     let (m, url) = monitor([])
     m.ingest([reading("Inf", .infinity), reading("Fine", 12)])
     m.save()
@@ -97,7 +97,7 @@ do {
 }
 
 do {
-    // Зі зіпсованою годиною середнє було 715674, і «більше, ніж зазвичай» не спрацьовувало ніколи
+    // With the corrupted hour the average was 715674, and "more than usual" never fired
     let (m, _) = monitor(realHours)
     for _ in 0..<5 { m.ingest([reading("macOS", 50)]) }
     m.ingest([reading("macOS", 1000)])
@@ -110,7 +110,7 @@ do {
 }
 
 do {
-    // Живі заміри при відкритій вкладці Power — лише для списку зараз
+    // Live samples with the Power tab open — only for the current list
     let (m, _) = monitor([])
     m.ingest([reading("Lynx", 30)], record: false)
     check("a live sample shows in the list", m.apps.map(\.name), ["Lynx"])

@@ -2,25 +2,25 @@ import Foundation
 import IOKit.pwr_mgt
 import notify
 
-// Root-хелпер Lynx Battery. Тримає ліміт заряду, Sailing, Heat Protection, Top Up, LED MagSafe.
+// Lynx Battery root helper. Enforces the charge limit, Sailing, Heat Protection, Top Up, MagSafe LED.
 //
-// Важелі залежать від прошивки:
-//  • межа в прошивці — bfF0, bfD0, bfE0 (прошивки 20xxx): заряд зупиняє сама прошивка, адаптер живить Mac, і так само уві сні;
-//  • заборона заряду — CHTE або CH0B+CH0C: адаптер живить Mac, батарея стоїть;
-//  • вимкнення адаптера — CH0I: Mac живе від батареї (розряд до ліміту).
-//  • CHIE на різних прошивках поводиться по-різному (на macOS 27 — як заборона заряду),
-//    тож при першому використанні хелпер дивиться, що саме сталося, і запам'ятовує роль ключа.
-// На виході, при вимкненні ліміту й при заряді ≤ 10 % — завжди повертає звичайну зарядку.
+// The levers depend on the firmware:
+//  • firmware limit — bfF0, bfD0, bfE0 (20xxx firmware): the firmware itself stops charging, the adapter powers the Mac, and it works in sleep too;
+//  • charge inhibit — CHTE or CH0B+CH0C: the adapter powers the Mac, the battery holds;
+//  • adapter off — CH0I: the Mac runs on battery (drains down to the limit).
+//  • CHIE behaves differently across firmware (on macOS 27 it acts as charge inhibit),
+//    so on first use the helper checks what actually happened and remembers the key's role.
+// On exit, when the limit is turned off, and at charge ≤ 10 % it always restores normal charging.
 
 setvbuf(stdout, nil, _IOLBF, 0)
 
-// Cask запускає це без root перед --restore: з увімкненим лімітом хелпер повертається, навіть якщо до оновлення його не було.
+// The cask runs this without root before --restore: with the limit on, the helper comes back even if it wasn't there before the upgrade.
 if CommandLine.arguments.count == 3, CommandLine.arguments[1] == "--mark-restore" {
     guard ChargeInstall.shouldRestore(config: FileManager.default.contents(atPath: ChargePaths.config)) else { exit(0) }
     exit(FileManager.default.createFile(atPath: CommandLine.arguments[2], contents: nil) ? 0 : 1)
 }
 
-// Cask запускає це через sudo наприкінці `brew upgrade`, коли є позначка. До будь-яких ключів SMC: це не демон, він лише ставить себе назад.
+// The cask runs this via sudo at the end of `brew upgrade` when the marker is present. Before touching any SMC keys: this isn't the daemon, it only reinstalls itself.
 if CommandLine.arguments.dropFirst().first == "--restore" {
     guard getuid() == 0 else { print("--restore needs root"); exit(1) }
     let attrs = try? FileManager.default.attributesOfItem(atPath: ChargePaths.dir)
@@ -45,13 +45,13 @@ let hasCHIE = smc.info("CHIE") != nil
 let hasCH0I = smc.info("CH0I") != nil
 let hasLED = smc.info("ACLC") != nil
 
-/// Межа в прошивці є, поки прошивка приймає записи. Деякі збірки 20xxx відхиляють їх навіть від root — тоді стара схема.
+/// The firmware limit is available while the firmware accepts writes. Some 20xxx builds reject them even from root — then the old scheme applies.
 var firmwareLimit = smc.info("bfF0") != nil && smc.info("bfD0") != nil && smc.info("bfE0") != nil
-/// Яку межу маємо тримати в прошивці; nil — вимкнена.
+/// Which limit we should hold in the firmware; nil — off.
 var firmwareTarget: (lower: Int, upper: Int)?
 
 enum Role: String { case unknown, inhibit, adapter, none }
-/// Роль CHIE, яку визначає самотест. З межею в прошивці CHIE лише вимикає адаптер для розряду, як описано в batt, тож без самотесту.
+/// CHIE's role, determined by the self-test. With a firmware limit CHIE only turns the adapter off for draining, as described in batt, so no self-test.
 var chieRole: Role = !hasCHIE ? .none : (firmwareLimit ? .adapter : .unknown)
 var chieTestStart: Date?
 
@@ -62,14 +62,14 @@ func log(_ s: String) { print("[\(Date())] \(s)") }
 
 func writeCHIE(_ on: Bool) { smc.write("CHIE", [on ? 0x00 : 0x08]) }
 
-/// Відсотки в ключах межі — ui32 у little-endian: 80 % — це 50 00 00 00.
+/// Percentages in the limit keys are little-endian ui32: 80 % is 50 00 00 00.
 func le32(_ v: Int) -> [UInt8] { [UInt8(v), 0, 0, 0] }
 
 func firmwareLimitIs(lower: Int, upper: Int) -> Bool {
     smc.readBytes("bfF0") == [2] && smc.readBytes("bfD0") == le32(upper) && smc.readBytes("bfE0") == le32(lower)
 }
 
-/// Порядок записів вимагає прошивка: вимкнути, верхня межа, нижня, увімкнути. Пишемо лише те, що змінилось.
+/// The firmware requires this write order: disable, upper limit, lower limit, enable. We only write what changed.
 func applyFirmwareLimit(lower: Int, upper: Int) -> Bool {
     if firmwareLimitIs(lower: lower, upper: upper) { return true }
     guard smc.write("bfF0", [0]), smc.write("bfD0", le32(upper)), smc.write("bfE0", le32(lower)), smc.write("bfF0", [2]) else { return false }
@@ -78,7 +78,7 @@ func applyFirmwareLimit(lower: Int, upper: Int) -> Bool {
 
 func disableFirmwareLimit() { if smc.readBytes("bfF0") != [0] { smc.write("bfF0", [0]) } }
 
-/// Прошивка не прийняла межу: далі старі важелі й самотест CHIE, як на Mac без цих ключів.
+/// The firmware didn't accept the limit: fall back to the old levers and the CHIE self-test, as on a Mac without these keys.
 func dropFirmwareLimit() {
     firmwareLimit = false
     firmwareTarget = nil
@@ -86,7 +86,7 @@ func dropFirmwareLimit() {
     log("firmware limit refused, using the older levers")
 }
 
-/// Тримає в прошивці потрібну межу; nil — вимикає, щоб заряд ішов як зазвичай.
+/// Holds the required limit in the firmware; nil turns it off so charging works as usual.
 func setFirmwareTarget(_ t: (lower: Int, upper: Int)?) {
     guard firmwareLimit else { return }
     if t?.lower == firmwareTarget?.lower && t?.upper == firmwareTarget?.upper { return }
@@ -99,9 +99,9 @@ func setFirmwareTarget(_ t: (lower: Int, upper: Int)?) {
     }
 }
 
-/// Пауза заряду (адаптер і далі живить Mac).
+/// Pause charging (the adapter keeps powering the Mac).
 func setCharging(_ on: Bool) {
-    if firmwareLimit { return }   // заряд зупиняє сама прошивка
+    if firmwareLimit { return }   // the firmware itself stops charging
     if hasCHTE { smc.write("CHTE", on ? [0, 0, 0, 0] : [1, 0, 0, 0]) }
     else if hasCH0B { smc.write("CH0B", [on ? 0 : 2]); smc.write("CH0C", [on ? 0 : 2]) }
     else if chieRole == .inhibit || chieRole == .unknown {
@@ -110,13 +110,13 @@ func setCharging(_ on: Bool) {
     }
 }
 
-/// Вимкнення адаптера (Mac працює від батареї).
+/// Turn the adapter off (the Mac runs on battery).
 func setAdapter(_ on: Bool) {
     if hasCH0I { smc.write("CH0I", [on ? 0 : 1]) }
     else if chieRole == .adapter { writeCHIE(on) }
 }
 
-/// ACLC: 0 — керує система, 3 — зелений, 4 — помаранчевий.
+/// ACLC: 0 — system controlled, 3 — green, 4 — orange.
 func setLED(_ v: UInt8) { if hasLED { smc.write("ACLC", [v]) } }
 
 func restoreAll() {
@@ -131,19 +131,19 @@ func restoreAll() {
 for sig in [SIGTERM, SIGINT, SIGHUP] {
     signal(sig) { _ in restoreAll(); exit(0) }
 }
-// Старт із чистого стану: після краху чи оновлення ніщо не лишається на паузі
+// Start from a clean state: after a crash or an update nothing stays paused
 restoreAll()
 
-// MARK: - Стан
+// MARK: - State
 
 var chargingOn = true
 var adapterOn = true
 var ledValue: UInt8 = 0
-var holding = false           // досягли ліміту й чекаємо, поки спуститься до limit − sailRange
-var draining = false          // розряджаємо до межі; вмикається з запасом, щоб округлення 72↔73 не смикало адаптер
+var holding = false           // reached the limit and waiting for it to drop to limit − sailRange
+var draining = false          // draining down to the limit; switches on with a margin so 72↔73 rounding doesn't toggle the adapter
 var hold = FirmwareHold()
 var limitRaise = LimitRaise()
-var wallSince: TimeInterval?   // відколи Mac живиться від розетки, а монітора не видно: його зв'язок піднімається не одразу, зокрема й після сну
+var wallSince: TimeInterval?   // since when the Mac is on wall power with no monitor visible: its link doesn't come up right away, including after sleep
 var cutBlockedLogged = false
 var heat = HeatGuard()
 var sleepAssertion: IOPMAssertionID = 0
@@ -182,7 +182,7 @@ func preventSleep(_ on: Bool) {
 func applyLowPower(_ cfg: ChargeConfig) {
     guard let at = cfg.lowPowerRequestAt, at != lastLowPowerRequest else { return }
     lastLowPowerRequest = at
-    guard Date().timeIntervalSince(at) < 60 else { return }   // старі запити не виконуємо
+    guard Date().timeIntervalSince(at) < 60 else { return }   // don't execute stale requests
     let p = Process()
     p.executableURL = URL(fileURLWithPath: "/usr/bin/pmset")
     p.arguments = ["-a", "lowpowermode", cfg.lowPower ? "1" : "0"]
@@ -190,22 +190,22 @@ func applyLowPower(_ cfg: ChargeConfig) {
     log("low power \(cfg.lowPower)")
 }
 
-/// Через 20 с після першої паузи через CHIE дивимось, що сталося, і фіксуємо роль ключа.
+/// 20 s after the first CHIE pause, check what happened and record the key's role.
 func classifyCHIE(_ b: BatterySnapshot) {
     guard chieRole == .unknown, let t = chieTestStart, Date().timeIntervalSince(t) > 20 else { return }
-    // Якщо за цей час macOS скинула ключ, вимір нічого не означає — пробуємо ще раз
+    // If macOS reset the key in the meantime, the measurement means nothing — try again
     if smc.readBytes("CHIE") != [0x08] { writeCHIE(false); chieTestStart = Date(); log("CHIE was reset during the test, retrying"); return }
-    if !b.onAC || b.watts < -0.3 { chieRole = .adapter }          // Mac перейшов на батарею
-    else if !b.isCharging { chieRole = .inhibit }                 // адаптер є, але заряд стоїть
-    else { chieRole = .none; writeCHIE(true); chargingOn = true }  // нічого не змінилось — відкат
+    if !b.onAC || b.watts < -0.3 { chieRole = .adapter }          // the Mac switched to battery
+    else if !b.isCharging { chieRole = .inhibit }                 // adapter present, but charging is held
+    else { chieRole = .none; writeCHIE(true); chargingOn = true }  // nothing changed — roll back
     log("CHIE role: \(chieRole.rawValue)")
     if chieRole == .adapter {
-        // Ми ставили «паузу заряду», а ключ насправді вимикає адаптер — далі працюємо як з адаптером
+        // We set "pause charging", but the key actually turns the adapter off — from now on treat it as the adapter lever
         chargingOn = true; adapterOn = false
     }
 }
 
-/// macOS (своє керування зарядом) скидає ключі назад, тож щоразу читаємо їх і, якщо треба, пишемо знову.
+/// macOS (its own charge management) resets the keys, so we read them every time and rewrite them if needed.
 var reasserts = 0
 func enforce() {
     func check(_ key: String, _ want: [UInt8]) {
@@ -215,7 +215,7 @@ func enforce() {
         if reasserts <= 20 || reasserts % 50 == 0 { log("re-asserted \(key) (was \(now.map { String(format: "%02x", $0) }.joined()), #\(reasserts))") }
     }
     if firmwareLimit {
-        // Межу в прошивці теж може скинути macOS чи інша програма
+        // macOS or another app can reset the firmware limit too
         if let t = firmwareTarget {
             if !firmwareLimitIs(lower: t.lower, upper: t.upper) {
                 reasserts += 1
@@ -233,16 +233,16 @@ func enforce() {
     if hasLED && ledValue != 0 { check("ACLC", [ledValue]) }
 }
 
-// MARK: - Рішення
+// MARK: - Decision
 
-/// Таймери йдуть за налаштуваннями: перемикач в апці застосовується за наступним tick.
+/// Timers follow the settings: a toggle in the app takes effect on the next tick.
 func scheduleTimers(_ cfg: ChargeConfig) {
     if tickTimer?.timeInterval != cfg.tickInterval {
         tickTimer?.invalidate()
         tickTimer = Timer.scheduledTimer(withTimeInterval: cfg.tickInterval, repeats: true) { _ in tick() }
         tickTimer?.tolerance = cfg.tickInterval / 8
     }
-    // Поки щось на паузі — перевіряємо ключі, щоб macOS не встигала дозарядити
+    // While something is paused, check the keys so macOS doesn't get a chance to top up
     if enforceTimer?.timeInterval != cfg.enforceInterval {
         enforceTimer?.invalidate()
         enforceTimer = Timer.scheduledTimer(withTimeInterval: cfg.enforceInterval, repeats: true) { _ in
@@ -260,7 +260,7 @@ func tick() {
     classifyCHIE(b)
     if b.onAC && adapterOn { wallSince = wallSince ?? ProcessInfo.processInfo.systemUptime } else { wallSince = nil }
 
-    // Ліміт тримаємо в тому відсотку, який бачить користувач; безпека (≤ 10 %) і Top Up — за справжнім зарядом
+    // The limit is held in the percentage the user sees; safety (≤ 10 %) and Top Up use the true charge
     let scale = cfg.scale ?? .trueCharge
     let shown = scale.percent(b)
     let toFull = cfg.limit >= scale.top(b)
@@ -270,10 +270,10 @@ func tick() {
         + (canCutAdapter ? ["adapter"] : []) + (hasLED ? ["led"] : []) + (firmwareLimit ? ["firmware-limit"] : [])
         + (UpdateKey.publicKey.isEmpty ? [] : ["app-update"])
 
-    // Що хочемо: stop — не заряджати; drain — ще й вимкнути адаптер, щоб спуститись до ліміту
+    // What we want: stop — don't charge; drain — also turn the adapter off to go down to the limit
     var stop = false, drain = false
     let lower = cfg.sailing ? cfg.sailFloor : cfg.limit - 1
-    // Межа для прошивки; nil — вимкнена, тобто заряд іде як зазвичай (ліміт вимкнено, Top Up, ≤ 10 %)
+    // The firmware limit; nil — off, i.e. charging works as usual (limit off, Top Up, ≤ 10 %)
     var target: (lower: Int, upper: Int)?
 
     if !cfg.enabled || (!canInhibit && !canCutAdapter) {
@@ -292,8 +292,8 @@ func tick() {
             holding = true
         }
     } else {
-        // Heat Protection з витримкою 5 хв, як в AlDente
-        // Адаптер, вимкнений нами, — це все ще розетка: інакше пауза через вимкнення адаптера сама себе скасовувала б
+        // Heat Protection with a 5 min hold, as in AlDente
+        // An adapter we turned off is still wall power: otherwise a pause via adapter-off would cancel itself
         let plugged = b.onAC || (!adapterOn && !AdapterCut.chargerGone(BatteryReader.powerPorts()))
         heat.update(enabled: cfg.heatProtection, temperature: b.temperature, max: cfg.heatMax, macPercent: b.macPercent, plugged: plugged)
 
@@ -301,7 +301,7 @@ func tick() {
         if toFull {
             holding = b.fullyCharged || b.percent >= 100
         } else if firmwareLimit {
-            // Між межами заряд стоїть, доки прошивка не почала заряджати сама: Mac міг вимкнутись і прокинутись посеред діапазону
+            // Between the limits charging holds until the firmware starts charging on its own: the Mac may have shut down and woken mid-range
             holding = shown >= cfg.limit || (shown > lower && !b.isCharging)
         } else {
             if shown >= cfg.limit { holding = true }
@@ -310,7 +310,7 @@ func tick() {
         if limitRaise.active { holding = false }
         if toFull || shown <= cfg.limit { draining = false } else if shown > cfg.limit + 1 { draining = true }
         let overLimit = firmwareLimit ? draining : !toFull && shown > cfg.limit + 1
-        // Вимкнення адаптера вимикає й монітор чи док на тому ж кабелі: тоді лише не заряджаємо, а розряджається за роботою
+        // Turning the adapter off also cuts a monitor or dock on the same cable: then we only stop charging and let use drain it
         let wantsDrain = overLimit && cfg.discharge && canCutAdapter
         let ports = wantsDrain ? BatteryReader.powerPorts() : []
         let dropsDevices = wantsDrain && AdapterCut.wouldDropDevices(ports)
@@ -323,22 +323,22 @@ func tick() {
         }
 
         if firmwareLimit && !toFull {
-            // Прошивка рахує у відсотку macOS, тож переводимо за поточним співвідношенням
+            // The firmware counts in the macOS percentage, so convert using the current ratio
             let toFirmware = { (v: Int) in min(100, Int((Double(v) * Double(b.macPercent) / Double(max(1, shown))).rounded())) }
-            // Поки заряджається, верхня межа трохи вище, а зупиняємо, щойно число дійшло до ліміту. Уві сні зупинить сама прошивка, на 1–2 % неточно
+            // While charging, the upper limit is a bit higher and we stop as soon as the number reaches the limit. In sleep the firmware stops it, 1–2 % off
             hold.update(limit: cfg.limit, shown: shown, macPercent: b.macPercent, charging: b.isCharging, willDrain: willDrain)
             let upper = hold.upper ?? min(100, toFirmware(cfg.limit) + (scale == .macOS ? 0 : 1))
             target = (min(toFirmware(lower), upper - 1), upper)
-            // Поки заряджається, округлення не варте перезапису ключів: зупинить перевірка вище. Але межа не вище заряду заряд не пустить
+            // While charging, rounding isn't worth rewriting the keys: the check above will stop it. But a limit not above the charge won't let it charge
             if hold.upper == nil, scale != .macOS, let cur = firmwareTarget, abs(cur.upper - upper) <= 1, willDrain || cur.upper > b.macPercent { target = cur }
-            // Прошивка між межами сама не почне заряд: піднімаємо нижню межу над зарядом
+            // Between the limits the firmware won't start charging on its own: raise the lower limit above the charge
             if limitRaise.active, let t = target { target = (max(t.lower, t.upper - 1), t.upper) }
         } else { hold.reset() }
 
         if let at = heat.stopAt {
             st.mode = .heat
             stop = true
-            // Спека: зупиняємо заряд на рівні, де спрацював захист, адаптер і далі живить Mac
+            // Heat: stop charging at the level where protection tripped; the adapter keeps powering the Mac
             target = (max(10, at - 20), at)
         } else if holding {
             stop = true
@@ -358,8 +358,8 @@ func tick() {
 
     setFirmwareTarget(target)
 
-    // Важелі: є заборона заряду — нею тримаємо; адаптер вимикаємо лише для розряду.
-    // Є тільки вимкнення адаптера — ним і тримаємо (Mac живе від батареї до точки Sailing).
+    // Levers: with charge inhibit, hold with it; turn the adapter off only to drain.
+    // With only adapter-off, hold with that (the Mac runs on battery down to the Sailing point).
     let wantCharge: Bool, wantAdapter: Bool
     if canInhibit {
         wantCharge = !stop
@@ -373,15 +373,15 @@ func tick() {
     if wantAdapter != adapterOn { setAdapter(wantAdapter); adapterOn = wantAdapter; log("adapter \(wantAdapter)") }
     enforce()
 
-    // LED MagSafe: зелений — тримаємо ліміт, помаранчевий — заряджає до ліміту
+    // MagSafe LED: green — holding the limit, orange — charging up to the limit
     var led: UInt8 = 0
     if cfg.enabled && cfg.magsafeLED && b.onAC {
         led = (st.mode == .holding || st.mode == .discharging) ? 3 : (st.mode == .heat ? 4 : (b.isCharging ? 4 : 0))
     }
     if led != ledValue { setLED(led); ledValue = led }
 
-    // Не спати, поки заряджаємо до ліміту, інакше в сні Mac дозарядиться до 100 %
-    // (межа в прошивці діє й уві сні, тож там не потрібно)
+    // Don't sleep while charging up to the limit, otherwise the Mac tops up to 100 % in sleep
+    // (the firmware limit works in sleep too, so it's not needed there)
     preventSleep(!firmwareLimit && cfg.enabled && cfg.sleepUntilLimit && b.onAC && !holding && shown < cfg.limit)
 
     st.adapterPaused = !adapterOn
@@ -393,7 +393,7 @@ func tick() {
 log("start · firmware limit=\(firmwareLimit) CHTE=\(hasCHTE) CH0B/C=\(hasCH0B) CHIE=\(hasCHIE) CH0I=\(hasCH0I) LED=\(hasLED)")
 tick()
 BatteryReader.observe { tick() }
-// Запити з апки (Top Up, енергозбереження) — підхоплюємо одразу, не чекаючи tick. Без опитування, тож хелпер не будиться дарма.
+// Requests from the app (Top Up, Low Power) are picked up right away, without waiting for a tick. No polling, so the helper isn't woken for nothing.
 var lastConfigStamp: Date?
 func checkConfig() {
     let m = (try? fm.attributesOfItem(atPath: ChargePaths.config))?[.modificationDate] as? Date
@@ -404,15 +404,15 @@ if configWatcher == nil {
     log("can't watch \(ChargePaths.dir), checking the config every 2 s")
     Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { _ in checkConfig() }
 }
-// Апка ще й будить нас сповіщенням після кожного запису — не залежить від того, чи тека віддала подію.
-// Повтори дешеві: tick лише тоді, коли файл справді змінився.
+// The app also wakes us with a notification after each write — independent of whether the folder delivered an event.
+// Repeats are cheap: tick only when the file actually changed.
 var configNotifyToken: Int32 = 0
 if notify_register_dispatch(ChargePaths.configChanged, &configNotifyToken, .main, { _ in checkConfig() }) != NOTIFY_STATUS_OK {
     log("can't listen for \(ChargePaths.configChanged)")
 }
 
-// Оновлення апки: запит пише не-root процес, тож UpdateInstall перевіряє все сам (підпис вкомпільованим ключем, sha256, бандл, версію, шлях).
-// Окрема черга: hdiutil і копіювання тривають секунди, а ліміт заряду має працювати й тоді.
+// App update: a non-root process writes the request, so UpdateInstall verifies everything itself (signature with the compiled-in key, sha256, bundle, version, path).
+// Separate queue: hdiutil and copying take seconds, and the charge limit must keep working meanwhile.
 let updateQueue = DispatchQueue(label: "com.mansfera.lynxbattery.update")
 var updateBusy = false
 func checkUpdateRequest() {

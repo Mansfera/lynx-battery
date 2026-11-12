@@ -2,14 +2,14 @@ import AppKit
 import Darwin
 
 struct AppEnergy: Identifiable {
-    static let macOS = "macOS"          // системні процеси, згруповані в один рядок
+    static let macOS = "macOS"          // system processes, grouped into one row
     var id: String { name }
     var name: String
     var bundlePath: String?
-    var impact: Double                 // сумарний Energy Impact процесів апки
+    var impact: Double                 // total Energy Impact of the app's processes
     var processes: [(name: String, impact: Double)]
-    var history: [Double]              // останні заміри для спарклайну
-    var average: Double                // середнє за весь збережений період
+    var history: [Double]              // recent samples for the sparkline
+    var average: Double                // average over the whole stored period
     var hot: Bool { history.count >= 6 && impact > max(8, average * 2.2) }
 
     var icon: NSImage {
@@ -18,11 +18,11 @@ struct AppEnergy: Identifiable {
     }
 }
 
-/// Енергія по апках: «top» дає Energy Impact процесу, ми групуємо хелпери в їхній .app.
+/// Energy by app: "top" gives each process's Energy Impact, we group helpers into their .app.
 final class EnergyMonitor {
     private struct Hour: Codable { var t: Date; var totals: [String: Double]; var n: Int }
 
-    /// Стеля правдивого POWER із «top». У реальній історії найбільше за годину — 346.5 на замір (усі процеси macOS разом), а збій дав 19 млн на замір. 10 000 лишає запас у ~30 разів для потужніших Mac.
+    /// Ceiling for a genuine POWER from "top". In real history the highest per hour is 346.5 per sample (all macOS processes together), while a glitch gave 19 million per sample. 10,000 leaves ~30× headroom for more powerful Macs.
     static let maxPower = 10_000.0
 
     private(set) var apps: [AppEnergy] = []
@@ -38,7 +38,7 @@ final class EnergyMonitor {
         if let d = try? Data(contentsOf: url), let h = try? JSONDecoder().decode([Hour].self, from: d) { hours = Self.healed(h) }
     }
 
-    /// Збій, що вже у файлі: сума не може бути більшою за стелю на кожен замір. Прибираємо лише цю апку в цю годину, бо решта рядків години чесні. Файл очиститься при наступному save().
+    /// A glitch already in the file: the sum can't exceed the ceiling per sample. Remove only this app in this hour, since the rest of the hour's rows are honest. The file is cleaned on the next save().
     private static func healed(_ hours: [Hour]) -> [Hour] {
         hours.map { h in
             var h = h
@@ -47,13 +47,13 @@ final class EnergyMonitor {
         }
     }
 
-    /// Коли востаннє закінчився замір, будь-який.
+    /// When the last sample of any kind finished.
     private(set) var lastSample: Date?
     private var lastSave = Date()
     private var recordNext = false
 
-    /// record — замір за розкладом, і лише він іде в історію: так години рівномірні в часі,
-    /// а часті живі заміри при відкритому поповері не роздувають частку апок, що працюють саме тоді (і нашої теж).
+    /// record — a scheduled sample, and only it goes into history: that way the hours are evenly spaced in time,
+    /// and frequent live samples while the popover is open don't inflate the share of apps running just then (ours included).
     func sample(record: Bool, _ done: @escaping () -> Void) {
         if record { recordNext = true }
         guard !busy else { return }
@@ -73,7 +73,7 @@ final class EnergyMonitor {
 
     func ingest(_ procs: [(pid: Int32, cmd: String, power: Double)], record: Bool = true) {
         var groups: [String: (impact: Double, path: String?, procs: [(String, Double)])] = [:]
-        // Умова відсікає й nan та inf: Double() їх розбирає, а JSON зберегти вже не зможе.
+        // The condition also rejects nan and inf: Double() parses them, but JSON can't save them.
         for p in procs where p.power > 0 && p.power <= Self.maxPower {
             let (app, path) = Self.owningApp(pid: p.pid, fallback: p.cmd)
             var g = groups[app] ?? (0, path, [])
@@ -86,21 +86,21 @@ final class EnergyMonitor {
             if recent[name]!.count > 40 { recent[name]!.removeFirst() }
             if let p = g.path { paths[name] = p }
         }
-        // Апки, що зникли з виводу, отримують 0 — інакше спарклайн бреше.
+        // Apps that dropped out of the output get 0 — otherwise the sparkline lies.
         for k in recent.keys where groups[k] == nil {
             recent[k]!.append(0)
             if recent[k]!.count > 40 { recent[k]!.removeFirst() }
             if recent[k]!.allSatisfy({ $0 == 0 }) { recent[k] = nil }
         }
 
-        // Погодинні суми для 24 год / 7 / 30 днів
+        // Hourly sums for 24 h / 7 / 30 days
         if record {
             let hourStart = Calendar.current.dateInterval(of: .hour, for: Date())!.start
             if hours.last?.t != hourStart { hours.append(Hour(t: hourStart, totals: [:], n: 0)) }
             for (name, g) in groups { hours[hours.count - 1].totals[name, default: 0] += g.impact }
             hours[hours.count - 1].n += 1
             hours.removeAll { $0.t < Date().addingTimeInterval(-30 * 86_400) }
-            // За часом, а не за числом замірів: у Eco їх лише 4 на годину
+            // By time, not by sample count: in Eco there are only 4 per hour
             if Date().timeIntervalSince(lastSave) >= 20 * 60 { save() }
         }
 
@@ -113,7 +113,7 @@ final class EnergyMonitor {
         .sorted { $0.impact > $1.impact }
     }
 
-    /// Середній Energy Impact кожної апки за проміжок (на замір).
+    /// Average Energy Impact of each app over the period (per sample).
     func averages(_ r: HistoryRange) -> [String: Double] {
         let cutoff = Date().addingTimeInterval(-r.seconds)
         var sum: [String: Double] = [:], n = 0
@@ -137,7 +137,7 @@ final class EnergyMonitor {
         if let d = try? JSONEncoder().encode(hours) { try? d.write(to: url, options: .atomic) }
     }
 
-    // MARK: - Системне
+    // MARK: - System
 
     private static func readTop() -> [(pid: Int32, cmd: String, power: Double)] {
         let p = Process()
@@ -151,7 +151,7 @@ final class EnergyMonitor {
         p.waitUntilExit()
         guard let text = String(data: data, encoding: .utf8) else { return [] }
 
-        // Перший замір top завжди нульовий — беремо лише рядки після другого заголовка.
+        // top's first sample is always zero — take only the rows after the second header.
         var headers = 0
         var out: [(Int32, String, Double)] = []
         for line in text.split(separator: "\n") {
@@ -170,7 +170,7 @@ final class EnergyMonitor {
         var buf = [CChar](repeating: 0, count: 4096)
         guard proc_pidpath(pid, &buf, UInt32(buf.count)) > 0 else { return (fallback, nil) }
         let path = String(cString: buf)
-        // Найзовнішній .app у шляху: «Claude.app/…/Claude Helper.app/…» → Claude
+        // The outermost .app in the path: "Claude.app/…/Claude Helper.app/…" → Claude
         if let r = path.range(of: ".app/") {
             let appPath = String(path[..<r.lowerBound]) + ".app"
             let name = (appPath as NSString).lastPathComponent.replacingOccurrences(of: ".app", with: "")

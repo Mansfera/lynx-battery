@@ -29,7 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, Set
         popover.animates = true
         popover.delegate = self
         let host = NSHostingController(rootView: PopoverView(model: model))
-        host.sizingOptions = .preferredContentSize   // поповер іде за висотою вмісту при зміні вкладок
+        host.sizingOptions = .preferredContentSize   // the popover follows the content height when switching tabs
         popover.contentViewController = host
 
         model.onChange = { [weak self] in self?.updateIcon() }
@@ -39,7 +39,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, Set
             .store(in: &bag)
         model.start()
 
-        // Відкрити поповер ззовні (повторний запуск або перевірка розміру без кліку по меню-бару)
+        // Open the popover from outside (a second launch or a size check without clicking the menu bar)
         DistributedNotificationCenter.default().addObserver(forName: Notification.Name("com.mansfera.lynxbattery.open"), object: nil, queue: .main) { [weak self] n in
             if let tab = (n.object as? String).flatMap(AppModel.Tab.init(rawValue:)) { self?.model.tab = tab }
             self?.showPopover()
@@ -48,7 +48,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, Set
 
     func applicationWillTerminate(_ n: Notification) { model.history.save(); model.energy.save() }
 
-    // LSUIElement не в Dock: повторний клік у Finder / Spotlight / Launchpad має відкрити поповер.
+    // LSUIElement isn't in the Dock: clicking it again in Finder / Spotlight / Launchpad should open the popover.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         showPopover()
         return false
@@ -79,8 +79,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, Set
             return
         }
         let style = Settings.shared.iconStyle
-        // Смуга біжить по іконці три проходи після підключення, далі — статична блискавка.
-        // Постійна анімація коштувала 2–3 % CPU: менюбар-апка не має так їсти батарею, яку стереже.
+        // The stripe runs over the icon for three passes after plugging in, then a static bolt.
+        // A constant animation cost 2–3 % CPU: a menu bar app shouldn't eat the battery it's guarding like that.
         if b.isCharging && style != .percentOnly && !wasCharging && Settings.shared.animateCharging && !Settings.shared.minimalEnergy && animTimer == nil {
             sweepFrames = 30
             animTimer = Timer.scheduledTimer(withTimeInterval: 0.12, repeats: true) { [weak self] t in

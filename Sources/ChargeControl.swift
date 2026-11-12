@@ -1,7 +1,7 @@
 import Foundation
 import notify
 
-/// Апка пише налаштування ліміту, root-хелпер їх виконує й звітує стан.
+/// The app writes the limit settings, the root helper enforces them and reports status.
 final class ChargeControl: ObservableObject {
     @Published var config = ChargeConfig() { didSet { if config != oldValue && !loadingFromFile { scheduleSave() } } }
     @Published private(set) var status: ChargeStatus?
@@ -15,7 +15,7 @@ final class ChargeControl: ObservableObject {
     private var loadingFromFile = false
     private var previewing = false
     private var timer: Timer?
-    /// Мінімальне споживання: у фоні стан читає лише оновлення моделі, власний таймер зайвий. Хелпер дізнається через налаштування.
+    /// Minimal energy use: in the background only model updates read the status, our own timer is redundant. The helper learns via the settings.
     var minimalEnergy = false { didSet { syncMinimalEnergy() } }
 
     init() {
@@ -26,7 +26,7 @@ final class ChargeControl: ObservableObject {
         setVisible(false)
     }
 
-    /// Хелпер пише стан раз на 15 с, а бачити його можна лише в поповері: у фоні читаємо рідко.
+    /// The helper writes status every 15 s, but it's only visible in the popover: in the background we read rarely.
     func setVisible(_ visible: Bool) {
         guard !previewing else { return }
         timer?.invalidate(); timer = nil
@@ -37,17 +37,17 @@ final class ChargeControl: ObservableObject {
         if visible { readStatus(); checkHelper() }
     }
 
-    /// Хелпер живий, якщо писав стан не пізніше хвилини тому.
+    /// The helper is alive if it wrote status no more than a minute ago.
     var helperAlive: Bool { status.map { Date().timeIntervalSince($0.updated) < ChargeStatus.aliveWindow } ?? false }
     var adapterOnly: Bool { status.map { !$0.capabilities.contains("charge-inhibit") && $0.capabilities.contains("adapter") } ?? false }
-    /// Ліміт тримається від розетки: лише цей стан малює іконку синім.
+    /// The limit is holding on wall power: only this state draws the icon blue.
     var holdingOnWall: Bool { helperAlive && status?.wallHold == true }
-    /// Межа в прошивці діє й уві сні, тож не спати до ліміту не потрібно.
+    /// The firmware limit works in sleep too, so there's no need to stay awake up to the limit.
     var limitWorksAsleep: Bool { status?.capabilities.contains("firmware-limit") ?? false }
-    /// Розряд до ліміту можливий, лише коли є обидва важелі.
+    /// Draining to the limit is possible only when both levers exist.
     var canDischarge: Bool { status.map { $0.capabilities.contains("charge-inhibit") && $0.capabilities.contains("adapter") } ?? false }
 
-    /// Ліміт задано у відсотку, який показує апка: при зміні режиму переводимо число, а фізична межа лишається та сама.
+    /// The limit is set in the percentage the app shows: when the mode changes we convert the number, and the physical limit stays the same.
     func adoptScale(_ scale: ChargeScale, _ raw: BatterySnapshot) {
         let old = config.scale ?? .trueCharge
         if config.scale == scale { return }
@@ -56,8 +56,8 @@ final class ChargeControl: ObservableObject {
         config.scale = scale
     }
 
-    /// Хелпер у бандлі новіший за встановлений — треба перевстановити (з паролем).
-    /// Читає обидва файли цілком, тож не з body вкладки, а при відкритті поповера й після встановлення.
+    /// The helper in the bundle is newer than the installed one — needs reinstalling (with the password).
+    /// Reads both files in full, so not from the tab's body, but when the popover opens and after install.
     private func checkHelper() {
         helperOutdated = {
             guard installed else { return false }
@@ -75,19 +75,19 @@ final class ChargeControl: ObservableObject {
         guard let d = FileManager.default.contents(atPath: ChargePaths.status),
               let s = try? dec.decode(ChargeStatus.self, from: d) else { status = nil; return }
         if s != status { status = s }
-        // Файл міг змінити хелпер (скидає Top Up після 100 %) чи інша копія апки: підхоплюємо все й не пишемо назад,
-        // інакше застарілі значення з пам'яті затруть файл. Поки є незбережена зміна, вона новіша за файл.
+        // The file may have been changed by the helper (clears Top Up after 100 %) or another copy of the app: pick everything up and don't write back,
+        // otherwise stale values from memory would overwrite the file. While there's an unsaved change, it's newer than the file.
         if saveWork == nil, let d = FileManager.default.contents(atPath: ChargePaths.config),
            let c = try? JSONDecoder().decode(ChargeConfig.self, from: d), c.sanitized() != config {
             loadingFromFile = true
             config = c.sanitized()
             loadingFromFile = false
-            // Перемикач живе в налаштуваннях апки: файл міг переписати старіший хелпер, який цього поля не знає
+            // The toggle lives in the app's settings: the file may have been rewritten by an older helper that doesn't know this field
             syncMinimalEnergy()
         }
     }
 
-    /// nil замість false: поки режим вимкнено, файл лишається таким, як був.
+    /// nil instead of false: while the mode is off, the file stays as it was.
     private func syncMinimalEnergy() {
         let want: Bool? = minimalEnergy ? true : nil
         if config.minimalEnergy != want { config.minimalEnergy = want }
@@ -110,16 +110,16 @@ final class ChargeControl: ObservableObject {
         guard !previewing, let d = try? JSONEncoder().encode(config.sanitized()) else { return }
         do { try d.write(to: URL(fileURLWithPath: ChargePaths.config), options: .atomic) }
         catch { self.error = "Couldn't save the charge settings: \(error.localizedDescription)"; return }
-        // Будимо хелпер, щоб новий ліміт діяв одразу, а не за наступним tick. Старіший хелпер сповіщення не чекає, йому вистачає теки.
+        // Wake the helper so the new limit applies right away, not on the next tick. An older helper doesn't wait for the notification; the folder is enough for it.
         notify_post(ChargePaths.configChanged)
-        // Хелпер відповідає за мить: читаємо його стан, не чекаючи таймера (5 с у поповері, 45 с у фоні)
+        // The helper responds in a moment: read its status without waiting for the timer (5 s in the popover, 45 s in the background)
         statusFollowUp?.cancel()
         let work = DispatchWorkItem { [weak self] in self?.statusFollowUp = nil; self?.readStatus() }
         statusFollowUp = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: work)
     }
 
-    /// Для прев'ю й тестів: підставити стан без хелпера.
+    /// For previews and tests: inject a status without the helper.
     func setPreview(installed: Bool, status: ChargeStatus?) {
         previewing = true
         timer?.invalidate()
@@ -127,13 +127,13 @@ final class ChargeControl: ObservableObject {
         self.status = status
     }
 
-    // MARK: - Встановлення
+    // MARK: - Installation
 
     func install() {
         let helper = Bundle.main.bundleURL.appendingPathComponent("Contents/Library/LaunchServices/\(ChargePaths.label)")
         guard FileManager.default.fileExists(atPath: helper.path) else { error = "The helper is missing from the app bundle."; return }
-        // Апка лежить у ~/Desktop, а він під захистом TCC: root-скрипт може не прочитати бандл.
-        // Тож копіюємо хелпер у тимчасову теку самі (свій бандл апці читати можна).
+        // The app lives in ~/Desktop, which is TCC-protected: a root script may not be able to read the bundle.
+        // So we copy the helper to a temp folder ourselves (the app may read its own bundle).
         let staged = FileManager.default.temporaryDirectory.appendingPathComponent("\(ChargePaths.label)-\(UUID().uuidString)")
         do { try FileManager.default.copyItem(at: helper, to: staged) }
         catch { self.error = "Couldn't stage the helper: \(error.localizedDescription)"; return }
@@ -142,7 +142,7 @@ final class ChargeControl: ObservableObject {
             guard let self else { return }
             self.installed = FileManager.default.fileExists(atPath: ChargePaths.daemonPlist)
             self.checkHelper()
-            // Спершу підхоплюємо перенесені налаштування, інакше значення з пам'яті затруть їх
+            // Pick up the migrated settings first, otherwise values from memory would overwrite them
             self.saveWork?.cancel()
             self.saveWork = nil
             self.readStatus()
@@ -152,7 +152,7 @@ final class ChargeControl: ObservableObject {
     }
 
     func uninstall() {
-        // bootout шле SIGTERM — хелпер сам повертає звичайну зарядку перед виходом
+        // bootout sends SIGTERM — the helper restores normal charging itself before exiting
         let script = """
         launchctl bootout system/\(ChargePaths.label) 2>/dev/null || true
         rm -f '\(ChargePaths.daemonPlist)' '\(ChargePaths.helperBinary)' '\(ChargePaths.status)'
@@ -162,7 +162,7 @@ final class ChargeControl: ObservableObject {
             self.installed = FileManager.default.fileExists(atPath: ChargePaths.daemonPlist)
             self.checkHelper()
             self.status = nil
-            // Без хелпера cask повертає його після оновлення, лише якщо ліміт увімкнений: знятий вручну не має повернутись
+            // Without the helper, the cask brings it back after an upgrade only if the limit is on: one removed by hand must not come back
             if ok && !self.installed {
                 self.saveWork?.cancel()
                 self.saveWork = nil
@@ -172,7 +172,7 @@ final class ChargeControl: ObservableObject {
         }
     }
 
-    /// osascript окремим процесом: NSAppleScript поза головним потоком ненадійний і мовчки нічого не робить.
+    /// osascript as a separate process: NSAppleScript off the main thread is unreliable and silently does nothing.
     private func runAsAdmin(_ script: String, done: @escaping (Bool) -> Void) {
         busy = true; error = nil
         let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("lynx-battery-\(UUID().uuidString).sh")
@@ -193,7 +193,7 @@ final class ChargeControl: ObservableObject {
                 guard let self else { return }
                 self.busy = false
                 let ok = proc.terminationStatus == 0
-                if !ok && !msg.contains("-128") {   // -128 — користувач натиснув «Скасувати»
+                if !ok && !msg.contains("-128") {   // -128 — the user clicked "Cancel"
                     self.error = msg.isEmpty ? "The admin script failed." : msg
                 }
                 done(ok)

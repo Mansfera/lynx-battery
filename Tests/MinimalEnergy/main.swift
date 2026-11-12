@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-// Режим «Minimal energy use»: що зупиняється на старті й при перемиканні, плюс PNG вкладки Power. Запуск: Tests/minimal-energy.sh
+// "Minimal energy use" mode: what stops at startup and on toggling, plus a PNG of the Power tab. Run: Tests/minimal-energy.sh
 
 let out = URL(fileURLWithPath: CommandLine.arguments[1], isDirectory: true)
 let fonts = URL(fileURLWithPath: CommandLine.arguments[2], isDirectory: true)
@@ -46,7 +46,7 @@ NSApp.setActivationPolicy(.prohibited)
 Brand.registerFonts(in: fonts)
 try? FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
 
-// CFFIXED_USER_HOME переносить файли даних, але не налаштування: вони живуть у справжньому ~/Library/Preferences під назвою цієї програми
+// CFFIXED_USER_HOME relocates data files but not preferences: they live in the real ~/Library/Preferences under this program's name
 let testDefaults = ProcessInfo.processInfo.processName
 UserDefaults.standard.removePersistentDomain(forName: testDefaults)
 
@@ -54,10 +54,10 @@ check("off by default", !Settings.shared.minimalEnergy)
 Settings.shared.minimalEnergy = true
 
 let model = AppModel()
-// Без цього AppModel змінює шкалу ліміту під порожні налаштування тестів, і ChargeControl пише її у файл, який виконує хелпер.
+// Without this, AppModel changes the limit scale to match the tests' empty settings, and ChargeControl writes it to the file the helper enforces.
 model.charge.setPreview(installed: false, status: nil)
 
-// CoreBluetooth без дозволу в Info.plist валить процес, тож сам старт уже перевіряє, що Bluetooth не чіпаємо
+// CoreBluetooth without permission in Info.plist kills the process, so the startup itself already checks that Bluetooth isn't touched
 model.start()
 check("Bluetooth stays off", model.ble.state == .unknown)
 model.popoverShown = true
@@ -99,7 +99,7 @@ render(model, "power-minimal-dark", dark: true)
 model.battery = nil
 render(model, "power-minimal-desktop")
 
-// Без дозволу вихід із режиму теж не чіпає Bluetooth, поки не відкрито Devices: інакше тут процес упаде
+// Without permission, leaving the mode doesn't touch Bluetooth either until Devices is opened: otherwise the process would crash here
 if !model.ble.authorized {
     Settings.shared.minimalEnergy = false
     pump(0.5)

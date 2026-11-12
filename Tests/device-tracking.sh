@@ -1,5 +1,5 @@
 #!/bin/bash
-# Перемикач «Track devices»: логіка й PNG поповера та налаштувань. Запуск: Tests/device-tracking.sh [тека для PNG]. Налаштувань, історії й ліміту заряду справжньої апки не чіпає; свої тестові налаштування прибирає.
+# The "Track devices" toggle: logic and PNGs of the popover and settings. Run: Tests/device-tracking.sh [PNG folder]. Doesn't touch the real app's settings, history or charge limit; cleans up its own test settings.
 set -e
 cd "$(dirname "$0")/.."
 OUT="${1:-build/device-tracking}"

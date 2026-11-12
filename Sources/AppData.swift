@@ -1,6 +1,6 @@
 import Foundation
 
-/// Де апка тримає свої дані, і перенесення зі старого імені (Etherlynx Battery, xyz.etherlynx.battery).
+/// Where the app keeps its data, and migration from the old name (Etherlynx Battery, xyz.etherlynx.battery).
 enum AppData {
     static let bundleID = "com.mansfera.lynxbattery"
     static let legacyBundleID = "xyz.etherlynx.battery"
@@ -9,7 +9,7 @@ enum AppData {
     static var dir: URL { support.appendingPathComponent(bundleID, isDirectory: true) }
     private static var legacyDir: URL { support.appendingPathComponent("Etherlynx Battery", isDirectory: true) }
 
-    /// Перед першим зверненням до Settings і до файлів історії. Настройки ліміту переносить установка хелпера: їхня тека належить root.
+    /// Before the first access to Settings and the history files. Limit settings are migrated by the helper install: their folder belongs to root.
     static func migrate() {
         migratePreferences(from: legacyBundleID, to: bundleID)
         migrateFolder(from: legacyDir, to: dir)

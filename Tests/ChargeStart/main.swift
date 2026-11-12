@@ -1,6 +1,6 @@
 import Foundation
 
-// Початок заряду. Лише чиста логіка: файл налаштувань і хелпер не чіпає.
+// Charge start. Pure logic only: doesn't touch the settings file or the helper.
 
 var failures = 0
 func check<T: Equatable>(_ name: String, _ got: T, _ want: T) {
@@ -13,7 +13,7 @@ var h = FirmwareHold()
 h.update(limit: 90, shown: 90, macPercent: 91, charging: false, willDrain: false)
 check("reaching the limit holds at the firmware's number", h.upper, 91)
 
-// Так і лишалось на реальному Mac: межа 90–91 при ліміті 99, заряд не починався зовсім
+// This is how it stayed on a real Mac: bounds 90–91 with a 99 limit, charging never started at all
 h.update(limit: 99, shown: 90, macPercent: 91, charging: false, willDrain: false)
 check("raising the limit while holding drops the old upper bound", h.upper, nil)
 h.update(limit: 99, shown: 90, macPercent: 91, charging: false, willDrain: false)
@@ -49,7 +49,7 @@ check("a real drain stays a drain: charging", draining.charging, false)
 check("a real drain stays a drain: current", draining.mA, -600)
 
 let charger = PowerPort(connected: true, transports: ["CC"])
-// Те, що показав справжній Smart M80C на 65 W
+// What a real Smart M80C showed at 65 W
 let monitor = PowerPort(connected: true, transports: ["CC", "USB2", "DisplayPort"])
 let tbMonitor = PowerPort(connected: true, transports: ["CC", "USB2", "CIO"])
 let dock = PowerPort(connected: true, transports: ["CC", "USB3"])

@@ -1,25 +1,25 @@
 import Foundation
 import IOKit.ps
 
-/// Mac без батареї (iMac, mini, Studio): чи є батарея за словами macOS і скільки споживає система.
-/// Окремий файл, бо хелпер цього не потребує: його бінарник не змінюється, тож апка не просить пароль на оновлення.
+/// Mac without a battery (iMac, mini, Studio): whether there's a battery according to macOS, and how much the system draws.
+/// A separate file because the helper doesn't need it: its binary doesn't change, so the app doesn't ask for a password on update.
 enum SystemPower {
-    /// Щойно підключили адаптер: macOS ще до хвилини віддає старий струм батареї, і здається, що вона досі живить Mac.
-    /// PDTR і PSTR живі: якщо адаптер покриває споживання, насправді розряду немає.
+    /// Adapter just plugged in: for up to a minute macOS still reports the old battery current, and it looks like the battery still powers the Mac.
+    /// PDTR and PSTR are live: if the adapter covers the draw, there's actually no discharge.
     static func dropStaleDrain(_ b: inout BatterySnapshot) {
         guard b.drainingOnAC, let input = SMC.shared.read("PDTR"), let load = SMC.shared.read("PSTR"),
               input > 0, input >= load - 0.5 else { return }
         b.watts = 0
     }
 
-    /// На батареї SystemLoad і струм оновлюються раз на хвилину, а PSTR живий — той самий, що в розбивці «Whole Mac right now».
+    /// On battery, SystemLoad and the current update once a minute, while PSTR is live — the same as in the "Whole Mac right now" breakdown.
     static func liveDraw(_ b: inout BatterySnapshot) {
         guard !b.onAC, let load = SMC.shared.read("PSTR"), plausible(load) else { return }
         b.systemWatts = load
     }
 
-    /// IOPS — те саме джерело, що й у pmset. Служба AppleSmartBattery сама по собі нічого не доводить:
-    /// на Mac без батареї вона може існувати. NULL — це помилка, а не «батареї нема», тоді вирішує BatteryReader.
+    /// IOPS is the same source pmset uses. The AppleSmartBattery service alone proves nothing:
+    /// it can exist on a Mac without a battery. NULL is an error, not "no battery"; then BatteryReader decides.
     static func hasInternalBattery() -> Bool {
         #if SIMULATE_NO_BATTERY
         return false
@@ -32,13 +32,13 @@ enum SystemPower {
         #endif
     }
 
-    /// ДБЖ теж потрапляє в цей список, але він не робить настільний Mac ноутбуком.
+    /// A UPS also shows up in this list, but it doesn't make a desktop Mac a laptop.
     static func hasInternalBattery(in sources: [[String: Any]]) -> Bool {
         sources.contains { $0[kIOPSTypeKey] as? String == kIOPSInternalBatteryType && $0[kIOPSIsPresentKey] as? Bool != false }
     }
 
-    /// PSTR — уся система (на MacBook збігається з SystemLoad батареї), PDTR — вхід від блока живлення.
-    /// Обидва читаються без root. nil — цей Mac такого не повідомляє.
+    /// PSTR — the whole system (on a MacBook it matches the battery's SystemLoad), PDTR — input from the power supply.
+    /// Both are readable without root. nil — this Mac doesn't report it.
     static func readWatts() -> Double? {
         #if SIMULATE_NO_WATTS
         return nil
@@ -47,6 +47,6 @@ enum SystemPower {
         #endif
     }
 
-    /// Працюючий Mac не споживає менше ватта: нуль чи сміття — це «не знаємо», а не показник.
+    /// A running Mac doesn't draw less than a watt: zero or garbage means "unknown", not a reading.
     static func plausible(_ watts: Double) -> Bool { watts.isFinite && watts >= 1 && watts < 1000 }
 }

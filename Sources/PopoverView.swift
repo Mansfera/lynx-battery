@@ -1,7 +1,7 @@
 import SwiftUI
 
-// Система etherlynx.xyz: біле тло, небесна сцена для головного, білі панелі з волосяною рамкою,
-// рядок статистики з роздільниками, Ink-пігулки. Поповер ніколи не вищий за екран — вміст прокручується.
+// The etherlynx.xyz system: white background, sky scene for the main block, white panels with a hairline border,
+// a stats row with dividers, Ink pills. The popover is never taller than the screen — the content scrolls.
 
 struct PopoverView: View {
     @ObservedObject var model: AppModel
@@ -23,12 +23,12 @@ extension EnvironmentValues {
     var palette: Palette { get { self[PaletteKey.self] } set { self[PaletteKey.self] = newValue } }
 }
 
-/// Прокрутка, що стискається до висоти вмісту, але не більша за екран.
-/// ScrollView + maxHeight + fixedSize дає попoверу справжню висоту: коротке — як є, довге — до межі й прокрутка.
-/// (ViewThatFits тут не годиться: sizeThatFits віддає максимум навіть для короткого вмісту.)
+/// A scroll view that shrinks to the content height, but no taller than the screen.
+/// ScrollView + maxHeight + fixedSize gives the popover its real height: short content as is, long content up to the limit and then scrolling.
+/// (ViewThatFits doesn't work here: sizeThatFits returns the maximum even for short content.)
 struct FitScroll<Content: View>: View {
     @ViewBuilder var content: Content
-    /// Увесь екран під меню-баром мінус хром поповера (вкладки, підвал, відступи, стрілка).
+    /// The whole screen below the menu bar minus the popover chrome (tabs, footer, padding, arrow).
     static var maxHeight: CGFloat { max(300, (NSScreen.main?.visibleFrame.height ?? 800) - 170) }
     var body: some View {
         ScrollView(.vertical, showsIndicators: false) { content }
@@ -38,9 +38,9 @@ struct FitScroll<Content: View>: View {
     }
 }
 
-// MARK: - Поверхні
+// MARK: - Surfaces
 
-/// Біла панель із волосяною рамкою (r 20), як картки на сайті.
+/// White panel with a hairline border (r 20), like cards on the site.
 struct Panel<Content: View>: View {
     @Environment(\.palette) private var pal
     var padding: CGFloat = 14
@@ -54,7 +54,7 @@ struct Panel<Content: View>: View {
     }
 }
 
-/// Сцена (r 28): небесний градієнт — лише для головного блока екрана.
+/// Scene (r 28): sky gradient — only for the main block of the screen.
 struct Stage<Content: View>: View {
     @Environment(\.palette) private var pal
     @ViewBuilder var content: Content
@@ -66,7 +66,7 @@ struct Stage<Content: View>: View {
     }
 }
 
-// MARK: - Головна
+// MARK: - Home
 
 struct MainPage: View {
     @ObservedObject var model: AppModel
@@ -98,7 +98,7 @@ struct MainPage: View {
     }
 }
 
-/// Нова версія на GitHub: над вкладками, щоб видно було з будь-якої. Хрестик ховає банер до наступної версії.
+/// New version on GitHub: above the tabs, so it's visible from any of them. The cross hides the banner until the next version.
 struct UpdateBanner: View {
     @ObservedObject var updates: UpdateChecker
     @ObservedObject var installer: UpdateInstaller
@@ -177,7 +177,7 @@ struct TopBar: View {
     @Environment(\.palette) private var pal
     var body: some View {
         HStack(spacing: 2) {
-            // Без батареї лишаються потужність і пристрої
+            // Without a battery, wattage and devices remain
             ForEach(model.tabs) { t in
                 let on = model.tab == t
                 Button { model.tab = t } label: {
@@ -256,8 +256,8 @@ struct HeroStage: View {
     }
 }
 
-/// Лінійка з рисками: пройдене — лінією, поточний рівень — крапкою.
-/// top < 100 — стеля зношеної батареї: вище неї шкала приглушена, бо туди заряд уже не дійде.
+/// Ruler with ticks: the covered part as a line, the current level as a dot.
+/// top < 100 — the ceiling of a worn battery: above it the scale is muted, since the charge won't get there anymore.
 struct TickRuler: View {
     let percent: Int
     var color: Color
@@ -287,7 +287,7 @@ struct TickRuler: View {
         .frame(height: 16)
         .padding(.horizontal, 4)
         .overlay(alignment: .bottom) {
-            // Підпис стелі стоїть у тому ж рядку, тож сусідні числа поступаються йому місцем
+            // The ceiling label sits on the same row, so neighboring numbers give way to it
             HStack {
                 Text("0"); Spacer()
                 Text("50").opacity(top < 100 && (43...57).contains(top) ? 0 : 1); Spacer()
@@ -307,7 +307,7 @@ struct TickRuler: View {
     }
 }
 
-/// Рядок цифр із волосяними роздільниками — як статистика на volodymyr.buzz.
+/// Row of figures with hairline dividers — like the stats on volodymyr.buzz.
 struct StatsRow: View {
     let b: BatterySnapshot
     let drain: Double?
@@ -376,7 +376,7 @@ struct ServicePanel: View {
     }
 }
 
-/// Історія як точкова матриця: стовпець — відрізок часу, висота — рівень.
+/// History as a dot matrix: column — a time slice, height — the level.
 struct DotHistoryPanel: View {
     @ObservedObject var model: AppModel
     @Environment(\.palette) private var pal
@@ -555,7 +555,7 @@ struct ChargeTab: View {
                                      range: 30...45, step: 1, suffix: "°")
                         }
                         if control.canDischarge {
-                            // Розряд до ліміту — лише коли є і заборона заряду, і вимкнення адаптера
+                            // Draining to the limit — only when there's both charge inhibit and adapter-off
                             Divider().overlay(pal.line)
                             Toggle2("Discharge to the limit", detail: "If the battery is above the limit on the charger, run on battery down to it. Skipped while a monitor or dock shares the plug.",
                                     isOn: $control.config.discharge) { EmptyView() }
@@ -641,7 +641,7 @@ struct LimitStage: View {
                     Toggle("", isOn: $control.config.enabled).labelsHidden().toggleStyle(.switch).tint(pal.toggleTint)
                 }
                 VStack(spacing: 2) {
-                    // Шкала завжди від 0, але повзунок зупиняється на lowest
+                    // The scale always starts at 0, but the slider stops at lowest
                     Slider(value: Binding(get: { Double(control.config.limit) },
                                           set: { control.config.limit = max(lowest, Int($0.rounded())) }),
                            in: limitRange)
@@ -700,11 +700,11 @@ struct LimitStage: View {
     }
 }
 
-/// Позначки під повзунком: 0, кожні 25 % і максимум, який у режимі оригінальної ємності дорівнює здоров'ю батареї.
+/// Marks under the slider: 0, every 25 %, and the maximum, which in original-capacity mode equals battery health.
 struct LimitMarkers: View {
     let top: Int
     @Environment(\.palette) private var pal
-    /// Половина бігунка: доріжка повзунка коротша за його ширину саме на стільки з кожного боку
+    /// Half the thumb: the slider track is shorter than its width by exactly this much on each side
     private let inset: CGFloat = 10
 
     private var values: [Int] { stride(from: 0, to: top - 8, by: 25).map { $0 } + [top] }
@@ -726,7 +726,7 @@ struct LimitMarkers: View {
     }
 }
 
-/// Рядок налаштування: назва, пояснення одним реченням, додатковий контрол і перемикач.
+/// Setting row: name, a one-sentence explanation, an extra control and a toggle.
 struct Toggle2<Extra: View>: View {
     let title: String
     let detail: String
@@ -900,7 +900,7 @@ struct AppRow: View {
                         }
                     }
                     Spacer()
-                    // Спарклайн лише з 5+ замірів: дві точки — не тренд, а випадкова похила
+                    // Sparkline only from 5+ samples: two points aren't a trend, just a random slope
                     Sparkline(values: app.history.count >= 5 ? app.history : [], color: app.hot ? Brand.signal : pal.fg)
                         .frame(width: 64, height: 18)
                     Text(String(format: "%.0f", app.impact)).font(Brand.mono(11, .semibold)).frame(width: 30, alignment: .trailing)
@@ -936,7 +936,7 @@ struct AppRow: View {
     }
 }
 
-/// Ватти всього Mac, а не лише процесів macOS: чип рахує енергію по блоках, а не по апках.
+/// Watts of the whole Mac, not just macOS processes: the chip measures energy by block, not by app.
 struct PowerBreakdownView: View {
     @ObservedObject var model: AppModel
     @AppStorage("powerBreakdownByUsage") private var byUsage = false
@@ -1007,7 +1007,7 @@ struct Sparkline: View {
     }
 }
 
-/// Mac без батареї: скільки споживає система зараз і як це мінялося за останні хвилини.
+/// Mac without a battery: how much the system draws now and how it changed over the last minutes.
 struct MacPowerStage: View {
     @ObservedObject var model: AppModel
     @Environment(\.palette) private var pal
@@ -1029,7 +1029,7 @@ struct MacPowerStage: View {
                             .font(.system(size: 18, weight: .semibold)).foregroundStyle(pal.fg.opacity(0.7))
                     }
                     .frame(height: 78)
-                    // Спарклайн лише з 5+ замірів, як і в енергії по апках
+                    // Sparkline only from 5+ samples, as in per-app energy
                     Sparkline(values: h.count >= 5 ? h : [], color: pal.fg).frame(height: 28)
                     VStack(alignment: .leading, spacing: 3) {
                         Text("Mac draw right now").font(Brand.text(13, .medium)).foregroundStyle(pal.fg.opacity(0.7))
@@ -1051,8 +1051,8 @@ struct MacPowerStage: View {
     }
 }
 
-/// Розподіл живлення як Sankey: джерела ліворуч, споживачі праворуч,
-/// товщина стрічки — вати, що йдуть цим шляхом. Ширини анімуються пружиною.
+/// Power distribution as a Sankey: sources on the left, consumers on the right,
+/// band thickness — the watts flowing along that path. Widths animate with a spring.
 struct PowerFlowStage: View {
     let b: BatterySnapshot
     let animating: Bool
@@ -1096,7 +1096,7 @@ struct PowerFlowStage: View {
     }
 }
 
-/// Animatable: SwiftUI інтерполює три потоки між замірами — стрічки плавно товщають і тоншають.
+/// Animatable: SwiftUI interpolates the three flows between samples — the bands thicken and thin smoothly.
 struct Sankey: View, Animatable {
     var adapterToBattery: Double
     var adapterToMac: Double
@@ -1111,13 +1111,13 @@ struct Sankey: View, Animatable {
         set { adapterToBattery = newValue.first; adapterToMac = newValue.second.first; batteryToMac = newValue.second.second }
     }
 
-    // from: 0 адаптер, 1 батарея; to: 0 батарея, 1 Mac. Тонка стрічка лишається видимою, але підписана справжніми ватами.
+    // from: 0 adapter, 1 battery; to: 0 battery, 1 Mac. A thin band stays visible but is labeled with the real watts.
     private struct Flow { let from: Int; let to: Int; let watts: Double; var w: Double { max(watts, 0.05) } }
 
     var body: some View {
-        // Закритий поповер лише ховає вікно: без paused хвиля крутила б кадри вічно, коштом батареї.
-        // 20 кадрів/с замість 30: повільна бліда хвиля виглядає так само, а сама діаграма коштує ~2 % CPU замість ~3 %.
-        // Підписи — поза TimelineView, щоб не верстати текст на кожен кадр.
+        // A closed popover only hides the window: without paused the wave would spin frames forever, at the battery's expense.
+        // 20 fps instead of 30: a slow pale wave looks the same, and the diagram itself costs ~2 % CPU instead of ~3 %.
+        // Labels are outside the TimelineView, so text isn't laid out on every frame.
         TimelineView(.animation(minimumInterval: 1 / 20, paused: !animating)) { tl in
             let phase = tl.date.timeIntervalSinceReferenceDate
             Canvas { ctx, size in
@@ -1139,7 +1139,7 @@ struct Sankey: View, Animatable {
         return f
     }
 
-    // Геометрія: вузли — колонки з великим радіусом, як на референсі
+    // Geometry: nodes are columns with a large radius, as in the reference
     private let nodeW: CGFloat = 54, gap: CGFloat = 12, minBand: CGFloat = 26
 
     private struct Layout {
@@ -1150,14 +1150,14 @@ struct Sankey: View, Animatable {
     private func layout(_ size: CGSize) -> Layout {
         let fs = flows
         let total = fs.reduce(0) { $0 + $1.w }
-        // Товщини стрічок, що разом дають рівно `available`: пропорційно ватам, але не менше за minBand.
-        // Нестачу тонких стрічок забираємо лише з надлишку товстих, тож без тонких пропорція точна.
+        // Band thicknesses that add up to exactly `available`: proportional to watts, but no less than minBand.
+        // The shortfall of thin bands comes only from the excess of thick ones, so without thin bands the proportion is exact.
         func thicknesses(_ available: CGFloat) -> [CGFloat] {
             let excess = fs.map { max(0, available * CGFloat($0.w / max(total, 0.01)) - minBand) }
             let k = (available - minBand * CGFloat(fs.count)) / max(excess.reduce(0, +), 0.01)
             return excess.map { minBand + $0 * k }
         }
-        // Кожна колонка заповнює всю висоту, зі своїми проміжками між вузлами, тому краї збігаються.
+        // Each column fills the full height, with its own gaps between nodes, so the edges line up.
         func column(_ node: (Flow) -> Int, x: CGFloat) -> (nodes: [Int: CGRect], bands: [CGFloat]) {
             let ids = [0, 1].filter { id in fs.contains { node($0) == id } }
             let bands = thicknesses(size.height - gap * CGFloat(max(0, ids.count - 1)))
@@ -1168,8 +1168,8 @@ struct Sankey: View, Animatable {
             }
             return (nodes, bands)
         }
-        let src = column(\.from, x: 0)                     // адаптер зверху, батарея знизу
-        let dst = column(\.to, x: size.width - nodeW)      // батарея зверху, Mac знизу
+        let src = column(\.from, x: 0)                     // adapter on top, battery below
+        let dst = column(\.to, x: size.width - nodeW)      // battery on top, Mac below
         var L = Layout(left: src.nodes, right: dst.nodes)
 
         var outY: [Int: CGFloat] = L.left.mapValues(\.minY), inY: [Int: CGFloat] = L.right.mapValues(\.minY)
@@ -1200,7 +1200,7 @@ struct Sankey: View, Animatable {
         for (_, s, e) in L.bands {
             let path = bandPath(s, e)
             ctx.fill(path, with: .color(fill))
-            // Світла хвиля, що біжить від джерела до споживача
+            // A light wave running from source to consumer
             var c = ctx
             c.clip(to: path)
             let x = (s.minX - 60) + CGFloat((phase * 0.6).truncatingRemainder(dividingBy: 1)) * (e.minX - s.minX + 120)
@@ -1208,7 +1208,7 @@ struct Sankey: View, Animatable {
                    with: .linearGradient(Gradient(colors: [.clear, pal.fg.opacity(0.07), .clear]),
                                          startPoint: CGPoint(x: x, y: 0), endPoint: CGPoint(x: x + 50, y: 0)))
         }
-        // Кути до стрічок — прямі, щоб вузол і стрічка читалися однією формою. Радіус — не більше половини висоти низького вузла.
+        // Corners facing the bands are square so the node and band read as one shape. Radius — no more than half the height of a short node.
         for r in L.left.values {
             let c = min(18, r.height / 2)
             let radii = RectangleCornerRadii(topLeading: c, bottomLeading: c, bottomTrailing: 0, topTrailing: 0)
@@ -1233,7 +1233,7 @@ struct Sankey: View, Animatable {
                         .opacity(s.height >= 22 ? 1 : 0)
                 }
                 if let a = L.left[0] {
-                    // У низькому вузлі значок і підпис стають в один рядок, інакше вилазять за його межі
+                    // In a short node the icon and label go on one row, otherwise they spill outside it
                     let stack = a.height >= 44 ? AnyLayout(VStackLayout(spacing: 4)) : AnyLayout(HStackLayout(spacing: 4))
                     stack {
                         Image(systemName: "powerplug.portrait.fill").font(.system(size: 15))
@@ -1296,7 +1296,7 @@ struct DevicesTab: View {
     }
 }
 
-/// Рядок пристрою: назва й заряд. Правила сповіщень і приховування — у меню, що відкривається кліком по рядку.
+/// Device row: name and charge. Alert and hiding rules live in the menu opened by clicking the row.
 struct DeviceRow: View {
     let device: BTDevice
     @ObservedObject var s = Settings.shared

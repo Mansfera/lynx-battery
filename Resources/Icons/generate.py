@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-# Логотип рисі з комірок батареї: контур, комірки й чотири варіанти кольору.
-# Пише вихідники .icon для Icon Composer і знак для повноекранного сповіщення. Потрібен shapely.
-# Запускати не напряму, а через Resources/Icons/build-icons.sh.
+# Lynx logo made of battery cells: outline, cells and four color variants.
+# Writes .icon sources for Icon Composer and the mark for the full-screen alert. Requires shapely.
+# Don't run directly; use Resources/Icons/build-icons.sh.
 import json
 import pathlib
 import shutil
@@ -11,9 +11,9 @@ from shapely.ops import unary_union
 HERE = pathlib.Path(__file__).resolve().parent
 WHITE, GREEN, INK = "#FFFFFF", "#30D158", "#0E0E10"
 
-# Геометрія на полотні 1000×1000, симетрія відносно x=500.
+# Geometry on a 1000×1000 canvas, symmetric about x=500.
 C = 500
-B, G, T = 62, 18, 120              # товщина контуру, щілина, висота ряду
+B, G, T = 62, 18, 120              # outline thickness, gap, row height
 R_OUT, R_IN, R_HOLE, R_CELL, R_TRI = 26, 10, 12, 14, 7
 TOP_Y = 321
 HALF = [(50, TOP_Y), (108, 186), (207, 186), (371, 597), (286, 824), (100, 879)]
@@ -36,7 +36,7 @@ def row(i):
 
 
 def cell(i, a, b):
-    """Комірка ряду i від dx=a до dx=b, обрізана контуром. Для a<0 одна посередині, інакше пара."""
+    """Cell of row i from dx=a to dx=b, clipped by the outline. For a<0 a single one in the middle, otherwise a pair."""
     y0, y1 = row(i)
     boxes = [box(C + a, y0, C + b, y1)] if a < 0 else [box(C + a, y0, C + b, y1), box(C - b, y0, C - a, y1)]
     return [p.intersection(inside).buffer(-R_CELL).buffer(R_CELL) for p in boxes]
@@ -55,7 +55,7 @@ EYES = cell(1, *EYE)
 EYE_ROW_REST = cell(1, *NOSE) + cell(1, *OUTER)
 PLAIN_ROW = cell(1, -WIDE, WIDE)
 
-# Варіант: шари згори донизу, (ім'я, фігури, колір). Перший варіант вшивається в апку як скляна іконка.
+# Variant: layers from top to bottom, (name, shapes, color). The first variant is baked into the app as the glass icon.
 VARIANTS = {
     "green-eyes": [("eyes", EYES, GREEN), ("cells", SOLID + EYE_ROW_REST + TRIANGLES, WHITE), ("border", BORDER + TUFTS, WHITE)],
     "white-eyes": [("cells", SOLID + EYES + EYE_ROW_REST + TRIANGLES, WHITE), ("border", BORDER + TUFTS, WHITE)],
@@ -63,7 +63,7 @@ VARIANTS = {
     "green-cells": [("cells", SOLID + PLAIN_ROW + TRIANGLES, GREEN), ("border", BORDER + TUFTS, WHITE)],
 }
 
-# Знак у межах полотна 1024: центруємо за обвідною рамкою.
+# Mark within a 1024 canvas: centered by its bounding box.
 everything = unary_union(BORDER + TUFTS)
 x0, y0, x1, y1 = everything.bounds
 MARK_SCALE = 1.0
@@ -100,7 +100,7 @@ def write_icon(name, layers):
             "translucency": {"enabled": True, "value": 0.4},
         })
     doc = {
-        # sRGB від Brand.ink
+        # sRGB from Brand.ink
         "fill": {"solid": "srgb:0.05490,0.05490,0.06275,1.00000"},
         "groups": groups,
         "supported-platforms": {"squares": ["macOS"]},
@@ -111,7 +111,7 @@ def write_icon(name, layers):
 for variant, layers in VARIANTS.items():
     write_icon(variant, layers)
 
-# Одноколірний знак без тла: для повноекранного сповіщення на небесній сцені.
+# Single-color mark without background: for the full-screen alert on the sky scene.
 (HERE.parent / "Marks" / "lynx-ink.svg").write_text(
     f'<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200" viewBox="0 0 1000 1000">'
     f'<path fill="{INK}" fill-rule="evenodd" d="{path_d(BORDER + TUFTS + SOLID + EYES + EYE_ROW_REST + TRIANGLES, 1, 0, 11)}"/></svg>\n'

@@ -1,6 +1,6 @@
 #!/bin/bash
-# Темп хелпера наживо: справжній код хелпера в окремій теці й без запису в SMC (прапорець HELPER_TEST).
-# Запуск: Tests/helper-pace.sh, близько 3 хв. Без root. Ліміту заряду й файлів встановленого хелпера не чіпає.
+# Live helper pacing: the real helper code in a separate folder and without SMC writes (HELPER_TEST flag).
+# Run: Tests/helper-pace.sh, about 3 min. No root. Doesn't touch the charge limit or the installed helper's files.
 set -e
 cd "$(dirname "$0")/.."
 TMP="$(mktemp -d)"
@@ -12,11 +12,11 @@ DIR="$TMP/data"; mkdir -p "$DIR"
 LIVE="/Library/Application Support/com.mansfera.lynxbattery"
 BEFORE="$(stat -f '%m' "$LIVE/charge-config.json" 2>/dev/null || true)"
 
-# Атомарно, як апка: тимчасовий файл і перейменування
+# Atomically, like the app: a temp file and a rename
 write_config() { printf '%s' "$1" > "$DIR/.tmp"; mv "$DIR/.tmp" "$DIR/charge-config.json"; }
 stamp() { stat -f '%m' "$DIR/charge-status.json" 2>/dev/null || echo 0; }
 
-# Найбільша пауза між записами стану за N секунд
+# The longest gap between status writes over N seconds
 longest_gap() {
     local last now gap=0 end=$((SECONDS + $1))
     last=$(date +%s)
@@ -45,13 +45,13 @@ GAP=$(longest_gap 40)
 echo "      normal: longest gap ${GAP}s"
 check "normal pace: about every 15 s" "$( ((GAP >= 10 && GAP <= 20)) && echo 1)"
 
-# Зміна налаштувань застосовується одразу, а не за наступним tick
+# A settings change applies right away, not on the next tick
 sleep 2; B=$(stamp); sleep 1.2
 write_config '{"enabled":false,"limit":80,"sailing":true,"sailRange":5,"heatProtection":true,"heatMax":35,"sleepUntilLimit":false,"magsafeLED":false,"discharge":true,"topUp":false,"lowPower":false,"minimalEnergy":true}'
 sleep 1
 check "a config change wakes the helper within a second" "$( (($(stamp) > B)) && echo 1)"
 
-# Апка після запису ще й шле сповіщення: воно будить хелпер навіть без події теки. Запис на місці теку не змінює
+# After writing, the app also sends a notification: it wakes the helper even without a folder event. An in-place write doesn't change the folder
 sleep 2; B=$(stamp); sleep 1.2
 printf '%s' '{"enabled":false,"limit":75,"sailing":true,"sailRange":5,"heatProtection":true,"heatMax":35,"sleepUntilLimit":false,"magsafeLED":false,"discharge":true,"topUp":false,"lowPower":false,"minimalEnergy":true}' > "$DIR/charge-config.json"
 sleep 1

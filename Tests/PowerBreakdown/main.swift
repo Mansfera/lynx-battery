@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-// Розбивка потужності в рядку macOS: групування каналів, «усе інше», живе читання і PNG. Запуск: Tests/power-breakdown.sh
+// Power breakdown in the macOS row: channel grouping, "everything else", live reading and PNG. Run: Tests/power-breakdown.sh
 
 let out = URL(fileURLWithPath: CommandLine.arguments[1], isDirectory: true)
 let fonts = URL(fileURLWithPath: CommandLine.arguments[2], isDirectory: true)
@@ -15,7 +15,7 @@ func check(_ name: String, _ ok: Bool) {
 func near(_ a: Double?, _ b: Double) -> Bool { a.map { abs($0 - b) < 0.001 } ?? false }
 func pump(_ seconds: TimeInterval) { RunLoop.main.run(until: Date().addingTimeInterval(seconds)) }
 
-// Набір каналів із справжнього M3
+// Channel set from a real M3
 let m3 = ["CPU Energy": 1.4, "ECPU": 0.2, "PCPU": 1.2, "GPU Energy": 0.4, "GPU": 0.38, "GPU SRAM": 0.02,
           "DRAM": 1.1, "AMCC": 0.3, "DCS": 0.5, "VDEC": 0.04, "ISP": 0.01, "AVE": 0.01,
           "DISP": 0.02, "DISPEXT": 0.08, "SOC_AON": 0.01, "SOC_REST": 0.3]
@@ -41,7 +41,7 @@ check("measured model: backlight leaves everything else", near(part(estimated, "
 check("measured sensors aren't marked as estimates", part(estimated, "CPU")?.estimated == false)
 
 func curveWatts(_ b: Double) -> Double { DisplayState.estimateBacklight(brightness: b, model: "Mac15,12") ?? -1 }
-// Заміри зі зміни яскравості на Mac15,12: приріст від 10% до 50% і до 100%
+// Measurements from brightness changes on Mac15,12: increase from 10% to 50% and to 100%
 check("curve matches the sweep: 10% to 50%", abs(curveWatts(0.5) - curveWatts(0.1) - 1.68) < 0.1)
 check("curve matches the sweep: 10% to 100%", abs(curveWatts(1) - curveWatts(0.1) - 4.63) < 0.1)
 check("curve stays in range", curveWatts(2) == curveWatts(1) && curveWatts(-1) == 0)
@@ -84,7 +84,7 @@ check("rate: quiet is idle", PowerActivity.rate(500) == "Idle")
 check("rate: kilobytes", PowerActivity.rate(20 * 1024) == "20 KB/s")
 check("rate: megabytes", PowerActivity.rate(3.5 * 1024 * 1024) == "3.5 MB/s")
 
-// Потік живлення в Power: стрічки разом — рівно те, що входить
+// Power flow in Power: the bands together are exactly what comes in
 func flowSnap(ac: Bool, charging: Bool, watts: Double, system: Double, input: Double) -> PowerFlow {
     BatterySnapshot(percent: 60, isCharging: charging, onAC: ac, fullyCharged: false, minutes: nil, watts: watts,
                     adapterWatts: ac ? 35 : nil, cycles: 0, designCycles: 1000, designCapacity: 1000, fullCapacity: 1000,
@@ -117,7 +117,7 @@ check("on the adapter: the breakdown doesn't replace the input", plugged.drawing
 let split = PowerFlow(toBattery: 22.15, adapterToMac: 10.55, batteryToMac: 0)
 check("total is the sum of the band labels", near(split.shownTotal, 22.2 + 10.6))
 
-// Живе читання: без root і на справжньому чипі
+// Live reading: without root and on a real chip
 let monitor = PowerBreakdownMonitor()
 var live: PowerBreakdown?
 let deadline = Date().addingTimeInterval(8)
@@ -132,7 +132,7 @@ if let live {
     check("live CPU is a sane number", (part(live, "CPU")?.watts).map { $0 > 0 && $0 < 200 } ?? false)
 }
 
-// Таймер живе лише поки розбивку видно й поповер відкритий
+// The timer lives only while the breakdown is visible and the popover is open
 _ = NSApplication.shared
 let wiring = AppModel()
 wiring.charge.setPreview(installed: false, status: nil)
@@ -158,7 +158,7 @@ Settings.shared.minimalEnergy = false
 wiring.popoverShown = false
 UserDefaults.standard.removePersistentDomain(forName: ProcessInfo.processInfo.processName)
 
-// PNG: розгорнутий рядок macOS
+// PNG: expanded macOS row
 NSApp.setActivationPolicy(.prohibited)
 Brand.registerFonts(in: fonts)
 try? FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)

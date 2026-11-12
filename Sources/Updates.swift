@@ -1,15 +1,15 @@
 import AppKit
 import Combine
 
-/// Раз на кілька годин питає GitHub про останній реліз. Без токена й без жодних даних про користувача:
-/// лише User-Agent з версією апки та ETag, щоб незмінна відповідь не рахувалась у ліміт.
+/// Every few hours asks GitHub for the latest release. No token and no user data whatsoever:
+/// only a User-Agent with the app version and an ETag, so an unchanged response doesn't count against the limit.
 final class UpdateChecker: ObservableObject {
-    /// Останній відомий реліз (з мережі або з кешу). Чи він новіший — вирішує UpdatePolicy.
+    /// The last known release (from the network or the cache). Whether it's newer is decided by UpdatePolicy.
     @Published private(set) var latest: ReleaseInfo?
     @Published private(set) var dismissed: String? { didSet { d.set(dismissed, forKey: Keys.dismissed) } }
-    /// Новий реліз, про який ще не сповіщали. Викликається на головному потоці.
+    /// A new release not yet alerted about. Called on the main thread.
     var onRelease: ((ReleaseInfo) -> Void)?
-    /// Почати автовстановлення; true — почали, тоді сповіщення про нову версію не треба.
+    /// Start auto-install; true — started, then no new-version alert is needed.
     var autoInstall: ((ReleaseInfo) -> Bool)?
 
     let current: String = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
@@ -18,7 +18,7 @@ final class UpdateChecker: ObservableObject {
     private var inFlight = false
     private var bag = Set<AnyCancellable>()
     private lazy var session: URLSession = {
-        let c = URLSessionConfiguration.ephemeral   // без куків і дискового кешу: ETag ведемо самі
+        let c = URLSessionConfiguration.ephemeral   // no cookies and no disk cache: we handle the ETag ourselves
         c.requestCachePolicy = .reloadIgnoringLocalCacheData
         c.timeoutIntervalForRequest = 20
         c.waitsForConnectivity = false
@@ -35,7 +35,7 @@ final class UpdateChecker: ObservableObject {
         dismissed = d.string(forKey: Keys.dismissed)
     }
 
-    /// Банер у поповері.
+    /// Banner in the popover.
     var available: ReleaseInfo? {
         UpdatePolicy.showBanner(latest, current: current, checkOn: Settings.shared.updateCheck, dismissed: dismissed) ? latest : nil
     }
@@ -52,7 +52,7 @@ final class UpdateChecker: ObservableObject {
             .sink { [weak self] on in if on { self?.announceIfNeeded() } }.store(in: &bag)
         Settings.shared.$autoInstall.dropFirst().removeDuplicates().receive(on: DispatchQueue.main)
             .sink { [weak self] on in if on { self?.announceIfNeeded() } }.store(in: &bag)
-        // Після сну таймер міг проспати строк — перевіряємо одразу, якщо пора
+        // After sleep the timer may have missed the deadline — check right away if it's due
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
             DispatchQueue.main.asyncAfter(deadline: .now() + 30) { self?.checkIfDue() }
         }
@@ -60,14 +60,14 @@ final class UpdateChecker: ObservableObject {
 
     private func apply(_ on: Bool) {
         timer?.invalidate(); timer = nil
-        objectWillChange.send()   // банер з'являється або зникає разом із перемикачем
+        objectWillChange.send()   // the banner appears or disappears along with the toggle
         guard on else { return }
-        // Не в момент старту. Кеш з минулого запуску сповіщає й без мережі
+        // Not at the moment of launch. The cache from the previous run alerts even without a network
         DispatchQueue.main.asyncAfter(deadline: .now() + 15) { [weak self] in
             self?.announceIfNeeded()
             self?.checkIfDue()
         }
-        // Таймер лише будить перевірку строку: так 8 годин рахуються й через сон
+        // The timer only wakes the deadline check: that way the 8 hours count through sleep too
         timer = Timer.scheduledTimer(withTimeInterval: 1800, repeats: true) { [weak self] _ in self?.checkIfDue() }
         timer?.tolerance = 300
     }
@@ -75,12 +75,12 @@ final class UpdateChecker: ObservableObject {
     private func checkIfDue() {
         guard Settings.shared.updateCheck else { return }
         let last = d.object(forKey: Keys.checkedAt) as? Date
-        // Перезапуск апки не скидає строк: не частіше ніж раз на годину, навіть якщо кеш порожній
+        // An app restart doesn't reset the deadline: no more than once an hour, even if the cache is empty
         guard UpdatePolicy.isDue(lastCheck: last, now: Date(), interval: latest == nil ? UpdatePolicy.minInterval : UpdatePolicy.interval) else { return }
         check()
     }
 
-    /// Запит до GitHub. Офлайн, ліміт, будь-яка помилка — тихо чекаємо наступного разу.
+    /// Request to GitHub. Offline, rate limit, any error — quietly wait for next time.
     func check() {
         guard !inFlight, Settings.shared.updateCheck else { return }
         inFlight = true
@@ -96,22 +96,22 @@ final class UpdateChecker: ObservableObject {
 
     private func handle(_ data: Data?, _ resp: HTTPURLResponse?) {
         inFlight = false
-        guard let resp else { return }   // офлайн: строк не зсуваємо, спробуємо за пів години
+        guard let resp else { return }   // offline: don't move the deadline, try again in half an hour
         d.set(Date(), forKey: Keys.checkedAt)
         switch resp.statusCode {
         case 304:
-            break   // нічого нового, кеш актуальний
+            break   // nothing new, the cache is current
         case 200:
             guard let data, let r = UpdatePolicy.parse(data) else { return }
             d.set(resp.value(forHTTPHeaderField: "ETag"), forKey: Keys.etag)
             d.set(try? JSONEncoder().encode(r), forKey: Keys.release)
             if r != latest { latest = r }
         case 404:
-            // Жодного релізу (або всі — пререлізи): забуваємо старий
+            // No release at all (or all are prereleases): forget the old one
             d.removeObject(forKey: Keys.etag); d.removeObject(forKey: Keys.release)
             latest = nil
         default:
-            return   // 403/429 — ліміт; чекаємо звичайного строку
+            return   // 403/429 — rate limit; wait for the regular deadline
         }
         announceIfNeeded()
     }

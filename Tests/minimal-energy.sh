@@ -1,5 +1,5 @@
 #!/bin/bash
-# Режим «Minimal energy use»: логіка й PNG вкладки Power. Запуск: Tests/minimal-energy.sh [тека для PNG]. Налаштувань, історії й ліміту заряду справжньої апки не чіпає; свої тестові налаштування прибирає.
+# "Minimal energy use" mode: logic and a PNG of the Power tab. Run: Tests/minimal-energy.sh [PNG folder]. Doesn't touch the real app's settings, history or charge limit; cleans up its own test settings.
 set -e
 cd "$(dirname "$0")/.."
 OUT="${1:-build/minimal-energy}"

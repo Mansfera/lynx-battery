@@ -1,6 +1,6 @@
 #!/bin/bash
-# Режим Mac без батареї на MacBook: логіка й PNG екранів у три збірки — звичайна, без батареї, без батареї й потужності.
-# Запуск: Tests/desktop-mode.sh [тека для PNG]. Файли налаштувань, історії й ліміту заряду справжньої апки не чіпає.
+# No-battery Mac mode on a MacBook: logic and screen PNGs in three builds — normal, no battery, no battery and no wattage.
+# Run: Tests/desktop-mode.sh [PNG folder]. Doesn't touch the real app's settings, history or charge limit files.
 set -e
 cd "$(dirname "$0")/.."
 OUT="${1:-build/desktop-mode}"
@@ -11,7 +11,7 @@ trap 'rm -rf "$TMP"' EXIT
 SOURCES=()
 for f in Sources/*.swift; do [ "$f" = Sources/main.swift ] || SOURCES+=("$f"); done
 
-run() {   # назва, прапорці компіляції
+run() {   # name, compile flags
     local name="$1"; shift
     echo; echo "=== $name"
     swiftc "${SOURCES[@]}" Tests/DesktopMode/main.swift "$@" -o "$TMP/$name" \

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Як часто міряємо енергію по апках і живі заміри на вкладці Power. Запуск: Tests/tracking-cadence.sh. Налаштувань, історії й ліміту заряду справжньої апки не чіпає; свої тестові налаштування прибирає.
+# How often we measure per-app energy and live samples on the Power tab. Run: Tests/tracking-cadence.sh. Doesn't touch the real app's settings, history or charge limit; cleans up its own test settings.
 set -e
 cd "$(dirname "$0")/.."
 TMP="$(mktemp -d)"

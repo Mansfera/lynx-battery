@@ -1,6 +1,6 @@
 import Foundation
 
-// Високі пороги в усіх режимах відсотка. Лише чиста логіка: без Settings, без файлів і без хелпера.
+// High thresholds in all percentage modes. Pure logic only: no Settings, no files and no helper.
 
 var failures = 0
 func check<T: Equatable>(_ name: String, _ got: T, _ want: T) {
@@ -9,7 +9,7 @@ func check<T: Equatable>(_ name: String, _ got: T, _ want: T) {
     print("\(ok ? "ok  " : "FAIL") \(name)\(ok ? "" : ": got \(got), want \(want)")")
 }
 
-/// Здоров'я 88 %: designTop лишається 88 в усіх режимах, різниться лише percentTop.
+/// Health 88 %: designTop stays 88 in all modes, only percentTop differs.
 func snap(_ percent: Int, top: Int, full: Bool = false, ac: Bool = true) -> BatterySnapshot {
     BatterySnapshot(percent: percent, isCharging: false, onAC: ac, fullyCharged: full, minutes: nil, watts: 0,
                     adapterWatts: nil, cycles: 0, designCycles: 1000, designCapacity: 1000, fullCapacity: 880,
@@ -18,7 +18,7 @@ func snap(_ percent: Int, top: Int, full: Bool = false, ac: Bool = true) -> Batt
 }
 let none: Int? = nil
 
-// Of original capacity: число стоїть на 88
+// Of original capacity: the number tops out at 88
 do {
     var h = HighAlertTracker()
     let all: Set<Int> = [80, 95, 100]
@@ -53,7 +53,7 @@ do {
     check("launching on a full battery stays quiet", started.update([100], full), none)
 }
 
-// True charge і macOS: стеля 100, хоч designTop і 88
+// True charge and macOS: ceiling 100, even though designTop is 88
 do {
     var h = HighAlertTracker()
     check("true: 90 is not 95", h.update([95, 100], snap(90, top: 100)), none)
@@ -69,7 +69,7 @@ do {
     check("macOS: 100 fires at 100", mac.update([100], snap(100, top: 100)), 100)
 }
 
-// Перемикання режиму: AlertEngine знову викликає start, бо число стрибнуло, а заряд той самий
+// Mode switch: AlertEngine calls start again, because the number jumped while the charge stayed the same
 do {
     var h = HighAlertTracker()
     _ = h.update([90], snap(80, top: 88))
@@ -86,7 +86,7 @@ do {
     check("switching on a full battery stays quiet", full.update([100], snap(88, top: 88, full: true)), none)
 }
 
-// Рядок стану на адаптері
+// Status line on the adapter
 check("status: at the top in design mode", snap(88, top: 88).statusLine, "Charged · on power adapter")
 check("status: below the top in design mode", snap(80, top: 88).statusLine, "On adapter · not charging")
 check("status: 88 in true mode isn't charged", snap(88, top: 100).statusLine, "On adapter · not charging")
@@ -110,7 +110,7 @@ check("status: charging to design top is full", charging(70, top: 88, minutes: 3
 check("status: at the limit still charging", charging(80, top: 100, minutes: 20).statusLine(target: 80),
       "Charging · 67 W · 20 min to full")
 
-// Слабкий адаптер: PD домовляється сходинками, тож перші заміри після підключення ще не вирок
+// Weak adapter: PD negotiates in steps, so the first samples after plugging in aren't a verdict yet
 func draining(adapter: Int?, system: Double = 30, ac: Bool = true) -> BatterySnapshot {
     BatterySnapshot(percent: 50, isCharging: false, onAC: ac, fullyCharged: false, minutes: nil, watts: -8,
                     adapterWatts: adapter, cycles: 0, designCycles: 1000, designCapacity: 1000, fullCapacity: 880,

@@ -1,9 +1,9 @@
 import Foundation
 
-/// Спільне для апки й root-хелпера: налаштування ліміту (пише апка) і стан (пише хелпер).
+/// Shared by the app and the root helper: limit settings (written by the app) and status (written by the helper).
 enum ChargePaths {
     #if HELPER_TEST
-    // Tests/helper-pace.sh: окрема тека замість справжньої. У звичайній збірці цього коду немає, тож root-хелпер шляхів ззовні не бере.
+    // Tests/helper-pace.sh: a separate folder instead of the real one. This code isn't in a normal build, so the root helper takes no paths from outside.
     static let dir = ProcessInfo.processInfo.environment["HELPER_TEST_DIR"]!
     #else
     static let dir = "/Library/Application Support/com.mansfera.lynxbattery"
@@ -14,21 +14,21 @@ enum ChargePaths {
     static let helperBinary = "/Library/PrivilegedHelperTools/com.mansfera.lynxbattery.helper"
     static let daemonPlist = "/Library/LaunchDaemons/com.mansfera.lynxbattery.helper.plist"
     static let log = "/var/log/lynx-battery-helper.log"
-    /// Сповіщення Darwin, яке апка шле після запису налаштувань: хелпер перечитує файл одразу.
-    /// Це лише «перевір файл» — саме налаштування хелпер бере тільки з файлу, тож чужий виклик нічого не змінить.
+    /// Darwin notification the app sends after writing settings: the helper rereads the file right away.
+    /// It's only "check the file" — the helper takes the settings themselves only from the file, so a foreign post changes nothing.
     #if HELPER_TEST
     static let configChanged = "com.mansfera.lynxbattery.test.config-changed:" + dir
     #else
     static let configChanged = "com.mansfera.lynxbattery.config-changed"
     #endif
-    /// Апка поклала запит на оновлення (UpdateInstall.requestName) — так само лише «перевір файл».
+    /// The app has dropped an update request (UpdateInstall.requestName) — likewise just "check the file".
     #if HELPER_TEST
     static let updateRequested = "com.mansfera.lynxbattery.test.update-requested:" + dir
     #else
     static let updateRequested = "com.mansfera.lynxbattery.update-requested"
     #endif
 
-    // Хелпер зі старою назвою: установка нового зупиняє й прибирає його, щоб двоє не сперечались за заряд
+    // Helper under the old name: installing the new one stops and removes it so the two don't fight over charging
     static let legacyDir = "/Library/Application Support/Etherlynx Battery"
     static let legacyLabel = "xyz.etherlynx.battery.helper"
     static let legacyHelperBinary = "/Library/PrivilegedHelperTools/xyz.etherlynx.battery.helper"
@@ -36,7 +36,7 @@ enum ChargePaths {
     static let legacyLog = "/var/log/etherlynx-battery-helper.log"
 }
 
-/// Установка хелпера: її запускає апка з паролем, а після `brew upgrade` — сам хелпер через cask.
+/// Helper install: the app runs it with the password, and after `brew upgrade` the helper itself does via the cask.
 enum ChargeInstall {
     static func script(helperPath: String, uid: uid_t) -> String {
         let plist = """
@@ -74,19 +74,19 @@ enum ChargeInstall {
         """
     }
 
-    /// brew при оновленні прибирає хелпер, а файл налаштувань лишає: повертаємо хелпер, лише якщо ліміт був увімкнений.
-    /// Читаємо одне поле, щоб старий чи новіший файл налаштувань не завадив.
+    /// brew removes the helper on upgrade but keeps the settings file: bring the helper back only if the limit was on.
+    /// Read a single field so an older or newer settings file doesn't get in the way.
     static func shouldRestore(config: Data?) -> Bool {
         guard let config, let json = try? JSONSerialization.jsonObject(with: config) as? [String: Any] else { return false }
         return json["enabled"] as? Bool == true
     }
 }
 
-/// У якому відсотку задано ліміт: той самий вибір, що й Settings.percentMode (хелпер Settings не бачить).
+/// Which percentage the limit is set in: the same choice as Settings.percentMode (the helper can't see Settings).
 enum ChargeScale: String, Codable {
     case macOS, trueCharge, ofDesign
 
-    /// Хелпер читає сирий знімок, де b.percent — справжній заряд.
+    /// The helper reads the raw snapshot, where b.percent is the true charge.
     func percent(_ b: BatterySnapshot) -> Int {
         switch self {
         case .macOS: b.macPercent
@@ -95,13 +95,13 @@ enum ChargeScale: String, Codable {
         }
     }
 
-    /// Найбільше значення в цьому відсотку: ліміт на цій позначці означає «заряджати до повного».
+    /// The highest value in this percentage: a limit at this mark means "charge to full".
     func top(_ b: BatterySnapshot) -> Int { self == .ofDesign ? b.designTop : 100 }
 
-    /// Найнижчий ліміт: 15 % справжнього заряду. При ≤ 10 % хелпер заряджає завжди, тож ближчий ліміт ганяв би заряд туди й назад.
+    /// The lowest limit: 15 % true charge. At ≤ 10 % the helper always charges, so a closer limit would bounce the charge back and forth.
     func lowest(_ b: BatterySnapshot) -> Int { min(top(b) - 1, ChargeScale.trueCharge.convert(15, to: self, b)) }
 
-    /// Те саме фізичне значення заряду в іншому відсотку, щоб при зміні режиму ліміт не зсувався.
+    /// The same physical charge value in another percentage, so the limit doesn't shift when the mode changes.
     func convert(_ value: Int, to other: ChargeScale, _ b: BatterySnapshot) -> Int {
         if self == other { return value }
         let design = Double(max(1, b.designTop)) / 100
@@ -119,40 +119,40 @@ enum ChargeScale: String, Codable {
 
 struct ChargeConfig: Codable, Equatable {
     var enabled = false
-    var limit = 80            // у відсотку scale; 10…100, у повзунку не нижче ChargeScale.lowest
-    /// Необов'язкове, бо в старому файлі налаштувань його немає; nil — справжній заряд, як раніше.
+    var limit = 80            // in the scale percentage; 10…100, the slider doesn't go below ChargeScale.lowest
+    /// Optional, since older settings files don't have it; nil — true charge, as before.
     var scale: ChargeScale?
     var sailing = true
-    var sailRange = 5         // 2…20: повертаємо заряд лише нижче limit − sailRange
+    var sailRange = 5         // 2…20: resume charging only below limit − sailRange
     var heatProtection = true
-    var heatMax = 35.0        // °C, як радить AlDente з посиланням на Apple
+    var heatMax = 35.0        // °C, as AlDente recommends, citing Apple
     var sleepUntilLimit = false
     var magsafeLED = true
-    var discharge = true      // автоматично розряджати до ліміту, якщо заряд вищий
-    var topUp = false         // один раз до повного, потім назад до ліміту
-    /// Запит на режим енергозбереження (ПКМ по іконці): хелпер застосовує pmset без пароля.
+    var discharge = true      // automatically drain down to the limit if the charge is higher
+    var topUp = false         // once to full, then back to the limit
+    /// Low Power mode request (right-click on the icon): the helper applies pmset without a password.
     var lowPower = false
     var lowPowerRequestAt: Date?
-    /// Перемикач «Minimal energy use»: хелпер будиться рідше. Необов'язкове, бо в старому файлі налаштувань його немає.
+    /// The "Minimal energy use" toggle: the helper wakes less often. Optional, since older settings files don't have it.
     var minimalEnergy: Bool?
 
-    /// Як часто хелпер перераховує й пише стан. Між перерахунками їх будять сповіщення про живлення й зміна налаштувань.
-    /// Разом із допуском таймера й паузою між читаннями в апці має лишатись менше за ChargeStatus.aliveWindow.
+    /// How often the helper recomputes and writes status. Between recomputes it's woken by power notifications and settings changes.
+    /// Together with timer leeway and the app's interval between reads, it must stay below ChargeStatus.aliveWindow.
     var tickInterval: TimeInterval { minimalEnergy == true ? 40 : 15 }
-    /// Як часто перевіряти ключі, поки щось на паузі. За 15 с macOS не встигне дозарядити помітно.
+    /// How often to check the keys while something is paused. In 15 s macOS can't top up noticeably.
     var enforceInterval: TimeInterval { minimalEnergy == true ? 15 : 3 }
 
-    /// Де Sailing знову вмикає заряд: не нижче межі безпеки хелпера, а в прошивку від'ємне число не піде.
+    /// Where Sailing turns charging back on: not below the helper's safety floor, and a negative number can't go into the firmware.
     var sailFloor: Int { max(10, limit - sailRange) }
 
-    /// Куди зараз заряджаємось у відсотку, який бачить користувач. Top Up і вимкнений ліміт — до стелі.
+    /// Where we're charging to now, in the percentage the user sees. Top Up and a disabled limit go to the ceiling.
     func chargingTarget(display: ChargeScale, _ b: BatterySnapshot) -> Int {
         let top = display.top(b)
         if !enabled || topUp { return top }
         return min(top, (scale ?? .trueCharge).convert(limit, to: display, b))
     }
 
-    /// Хелпер працює від root і читає файл, який може правити користувач, — тож лише перевірені межі.
+    /// The helper runs as root and reads a file the user can edit — so only validated bounds.
     func sanitized() -> ChargeConfig {
         var c = self
         c.limit = min(100, max(10, c.limit))
@@ -162,8 +162,8 @@ struct ChargeConfig: Codable, Equatable {
     }
 }
 
-/// На якому значенні прошивки (її відсоток — як у macOS) зупинились, коли число дійшло до ліміту.
-/// Діє лише для цього ліміту: якби вона пережила підняття ліміту, прошивка так і не почала б заряджати.
+/// The firmware value (its percentage is the macOS one) where we stopped when the number reached the limit.
+/// Valid only for this limit: if it survived raising the limit, the firmware would never start charging.
 struct FirmwareHold {
     private(set) var upper: Int?
     private var limit: Int?
@@ -178,7 +178,7 @@ struct FirmwareHold {
     mutating func reset() { upper = nil }
 }
 
-/// Піднятий ліміт заряджає одразу, не чекаючи, поки заряд спуститься до старої нижньої межі (sailing).
+/// A raised limit charges right away, without waiting for the charge to drop to the old lower bound (sailing).
 struct LimitRaise {
     private var limit: Int?
     private(set) var active = false
@@ -193,8 +193,8 @@ struct LimitRaise {
     }
 }
 
-/// Heat Protection: зупиняє заряд, щойно батарея досягла межі, і відпускає лише через 5 хв і після охолодження на `margin`.
-/// Відсоток, на якому зупинились (у розетці), лишається тим самим до кінця паузи: межа, що бігає за зарядом, щоразу перезаписувала б прошивку.
+/// Heat Protection: stops charging as soon as the battery hits the limit, and releases only after 5 min and cooling by `margin`.
+/// The percentage we stopped at (on wall power) stays the same until the pause ends: a limit chasing the charge would rewrite the firmware every time.
 struct HeatGuard {
     static let hold: TimeInterval = 300
     static let margin = 2.0
@@ -205,7 +205,7 @@ struct HeatGuard {
 
     mutating func update(enabled: Bool, temperature: Double?, max: Double, macPercent: Int, plugged: Bool, now: Date = Date()) {
         guard enabled else { since = nil; stopAt = nil; return }
-        // Пропущене читання датчика нічого не змінює
+        // A missed sensor reading changes nothing
         if let t = temperature {
             if t >= max {
                 if since == nil { since = now }
@@ -217,28 +217,28 @@ struct HeatGuard {
     }
 }
 
-/// Коли можна вимикати адаптер для розряду: вимкнення зачіпає й те, що під'єднане тим самим кабелем.
+/// When the adapter may be turned off to drain: turning it off also affects whatever is connected over the same cable.
 enum AdapterCut {
-    /// Скільки часу без сну чекати після підключення: монітор піднімає зв'язок пізніше, ніж з'являється живлення.
+    /// How long to wait without sleep after plugging in: a monitor brings its link up later than power appears.
     static let settle: TimeInterval = 30
 
     static func wouldDropDevices(_ ports: [PowerPort]) -> Bool { ports.contains(where: \.carriesDevices) }
 
-    /// Кабель висмикнули, поки адаптер вимкнений: зарядка видна як порт лише з CC, бо порт із даними до вимкнення не допустив би.
-    /// Порожній список — Mac без цих портів, про нього нічого не знаємо.
+    /// Cable pulled while the adapter is off: the charger shows up as a CC-only port, because a port with data wouldn't have allowed turning it off.
+    /// Empty list — a Mac without these ports, we know nothing about it.
     static func chargerGone(_ ports: [PowerPort]) -> Bool {
         !ports.isEmpty && !ports.contains { $0.connected && !$0.carriesData }
     }
 
     static func allowed(_ ports: [PowerPort], adapterOn: Bool, onAC: Bool, wallFor: TimeInterval) -> Bool {
         if wouldDropDevices(ports) { return false }
-        if !adapterOn { return !chargerGone(ports) }   // уже вимкнений: живлення не видно, тож вирішує лише порт
+        if !adapterOn { return !chargerGone(ports) }   // already off: power isn't visible, so only the port decides
         return onAC && wallFor >= settle
     }
 }
 
 struct ChargeStatus: Codable, Equatable {
-    /// Стан, старіший за це, означає, що хелпер не працює.
+    /// Status older than this means the helper isn't running.
     static let aliveWindow: TimeInterval = 60
 
     enum Mode: String, Codable {
@@ -250,14 +250,14 @@ struct ChargeStatus: Codable, Equatable {
     var temperature: Double?
     var adapterPaused = false
     var chargingPaused = false
-    /// Ліміт тримається: адаптер живить Mac, батарея не заряджається й не віддає. Необов'язкове, бо старий хелпер цього поля не пише.
+    /// The limit is holding: the adapter powers the Mac, the battery neither charges nor discharges. Optional, since an older helper doesn't write this field.
     var wallHold: Bool?
-    /// Що вміє цей Mac: "charge-inhibit" (CHTE / CH0B+CH0C / межа в прошивці), "adapter" (CHIE / CH0I), "led" (ACLC), "firmware-limit" (bfF0, bfD0, bfE0).
+    /// What this Mac supports: "charge-inhibit" (CHTE / CH0B+CH0C / firmware limit), "adapter" (CHIE / CH0I), "led" (ACLC), "firmware-limit" (bfF0, bfD0, bfE0).
     var capabilities: [String] = []
     var note: String?
 }
 
-/// Будить, коли в теці з'являється чи замінюється файл, — без опитування. Апка пише налаштування атомарно, тож це зміна самої теки.
+/// Wakes when a file appears or is replaced in the folder — no polling. The app writes settings atomically, so it's a change to the folder itself.
 final class FolderWatcher {
     private let source: DispatchSourceFileSystemObject
 
