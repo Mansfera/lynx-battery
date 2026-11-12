@@ -42,7 +42,11 @@ Charge, health (full ÷ design capacity), cycles, battery temperature, how much 
 ### Power
 A power-flow diagram from the adapter to the battery and the Mac. Its bands always add up to the adapter's input: the battery's charge and the input are read at the same moment (SMC `CHBI` and `PDTR`), and the Mac gets the rest, which includes the loss from charging inside the Mac. On battery the band is the Mac's live draw (SMC `PSTR`), the same reading as the whole-Mac breakdown below, and with that breakdown open both show the same number. Below it, energy use by app (live, 24 hours, 7 days and 30 days), grouped by app bundle. Opening the macOS row shows where the whole Mac's power is going right now, in watts: display, CPU, GPU, memory, Neural Engine, video and camera, the rest of the chip, and everything else, in a fixed order or sorted by usage. Wi-Fi, the SSD and audio have no power sensors, so they show live activity under everything else instead of watts. The backlight has no power sensor of its own, so Display's watts are an estimate from brightness, marked with `~`, measured on the MacBook Air M3 (Mac15,12). Other models show only the brightness, and the screen's watts count under everything else. It's measured only while that row is open.
 
-Minimal energy use cuts the app's own draw. It stops energy sampling, animations, the screen glow and Bluetooth scans, and reads the battery less often while the menu is closed. Devices refresh only when you open the menu, so their alerts can come late. The charge limit and battery alerts keep working. The charge-limit helper checks in less often too, every 40 seconds instead of 15.
+Energy by app comes from `top`, which runs for about a second per sample. Settings → General → Power tracking sets how often it runs in the background: **Frequent** every 2 minutes, **Normal** every 5 minutes (the default), or **Eco** every 15 minutes, which still gives each hour four samples for the 24-hour, 7-day and 30-day averages. Only these scheduled samples go into the history, so it stays even over time and doesn't fill up with whatever runs while you're looking, including this app drawing the menu.
+
+While the Power tab is open, the power flow refreshes every 2 seconds and energy by app every 10 seconds. The first live sample waits 2 seconds, so it doesn't measure the menu opening. Turn off **Live Power tab** in the same section to keep the usual pace: the battery every 5 seconds and one energy sample when the tab opens.
+
+Minimal energy use cuts the app's own draw. It switches energy by app to Eco and turns off the live Power tab, animations, the screen glow and Bluetooth scans, and reads the battery less often while the menu is closed. Devices refresh only when you open the menu, so their alerts can come late. The charge limit and battery alerts keep working. The charge-limit helper checks in less often too, every 40 seconds instead of 15.
 
 ### Devices
 AirPods (left, right and case, even before they connect), Magic Mouse, Keyboard and Trackpad, a paired iPhone or iPad nearby, and anything connected that exposes the Bluetooth Battery Service. macOS asks for Bluetooth access the first time you open this tab; until you allow it, iPhone, iPad and other devices read over the Battery Service don't show up or send alerts.
@@ -108,6 +112,8 @@ Tests/high-alerts.sh    # alert thresholds in every percent mode
 Tests/charge-limit.sh   # limit bounds and scale conversion
 Tests/charge-start.sh   # charging starts after a limit change, live charge state
 Tests/energy-history.sh # impossible readings stay out of energy by app
+Tests/tracking-cadence.sh # how often energy by app is sampled, and the live Power tab
+Tests/minimal-energy.sh # what Minimal energy use slows down, renders the Power tab to PNG
 Tests/helper-restore.sh # the cask puts the helper back after an upgrade
 Tests/right-click.sh    # right-click only toggles Low Power Mode without a password prompt
 Tests/desktop-mode.sh   # Macs without a battery, renders each screen to PNG

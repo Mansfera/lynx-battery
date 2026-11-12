@@ -109,5 +109,15 @@ do {
     check("and the live value stays honest", m.apps.first?.impact, 60)
 }
 
+do {
+    // Живі заміри при відкритій вкладці Power — лише для списку зараз
+    let (m, _) = monitor([])
+    m.ingest([reading("Lynx", 30)], record: false)
+    check("a live sample shows in the list", m.apps.map(\.name), ["Lynx"])
+    check("but stays out of the history", m.averages(.month).isEmpty, true)
+    m.ingest([reading("Lynx", 2)])
+    check("only scheduled samples make the averages", m.averages(.month)["Lynx"], 2)
+}
+
 print(failures == 0 ? "All passed" : "\(failures) failed")
 exit(failures == 0 ? 0 : 1)

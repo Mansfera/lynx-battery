@@ -139,7 +139,7 @@ struct TopBar: View {
             // Без батареї лишаються потужність і пристрої
             ForEach(model.tabs) { t in
                 let on = model.tab == t
-                Button { model.tab = t; if t == .power { model.sampleEnergy() } } label: {
+                Button { model.tab = t } label: {
                     Text(t.rawValue)
                         .font(Brand.text(12.5, .medium))
                         .padding(.horizontal, 13).padding(.vertical, 7)
@@ -786,18 +786,14 @@ struct PowerTab: View {
                         EnergySwitch(range: $energyRange)
                     }
                     if energyRange == .live {
-                        if s.minimalEnergy {
-                            Text("Paused while Minimal energy use is on.").font(Brand.text(11)).foregroundStyle(pal.muted)
-                        } else {
-                            if model.apps.isEmpty {
-                                Text("Sampling…").font(Brand.text(11)).foregroundStyle(pal.muted)
-                            }
-                            ForEach(model.apps.prefix(7)) { a in AppRow(model: model, app: a) }
+                        if model.apps.isEmpty {
+                            Text("Sampling…").font(Brand.text(11)).foregroundStyle(pal.muted)
                         }
+                        ForEach(model.apps.prefix(7)) { a in AppRow(model: model, app: a) }
                     } else {
                         let top = model.energy.top(energyRange.history!, limit: 7)
                         if top.isEmpty {
-                            Text(s.minimalEnergy ? "Paused while Minimal energy use is on." : "Builds up as the app runs — sampled every 2 minutes.").font(Brand.text(11)).foregroundStyle(pal.muted)
+                            Text("Builds up as the app runs — sampled every \(Int(model.energyInterval / 60)) minutes.").font(Brand.text(11)).foregroundStyle(pal.muted)
                         }
                         ForEach(top, id: \.name) { t in
                             HStack(spacing: 8) {
@@ -819,7 +815,6 @@ struct PowerTab: View {
             }
             MinimalEnergyRow(hasBattery: b != nil)
         }
-        .onAppear { model.sampleEnergy() }
     }
 }
 
@@ -829,7 +824,7 @@ struct MinimalEnergyRow: View {
     @Environment(\.palette) private var pal
     var body: some View {
         Toggle2("Minimal energy use",
-                detail: "Turns off energy by app, animations, the screen glow and Bluetooth scans. Devices refresh only when you open this menu, so their alerts can come late."
+                detail: "Samples energy by app only every 15 minutes and turns off animations, the screen glow and Bluetooth scans. Devices refresh only when you open this menu, so their alerts can come late."
                     + (hasBattery ? " The charge limit keeps working." : " The wattage in the menu bar updates once a minute."),
                 isOn: $s.minimalEnergy) { EmptyView() }
             .padding(.horizontal, 14).padding(.vertical, 10)
@@ -1078,9 +1073,10 @@ struct Sankey: View, Animatable {
     private struct Flow { let from: Int; let to: Int; let watts: Double; var w: Double { max(watts, 0.05) } }
 
     var body: some View {
-        // Закритий поповер лише ховає вікно: без paused хвиля крутила б 30 кадрів/с вічно, коштом батареї.
+        // Закритий поповер лише ховає вікно: без paused хвиля крутила б кадри вічно, коштом батареї.
+        // 20 кадрів/с замість 30: повільна бліда хвиля виглядає так само, а сама діаграма коштує ~2 % CPU замість ~3 %.
         // Підписи — поза TimelineView, щоб не верстати текст на кожен кадр.
-        TimelineView(.animation(minimumInterval: 1 / 30, paused: !animating)) { tl in
+        TimelineView(.animation(minimumInterval: 1 / 20, paused: !animating)) { tl in
             let phase = tl.date.timeIntervalSinceReferenceDate
             Canvas { ctx, size in
                 draw(ctx: ctx, size: size, phase: phase)

@@ -68,11 +68,11 @@ model.popoverShown = false
 pump(0.2)
 check("no top at launch", childCount(named: "top") == 0)
 check("no system_profiler at launch", childCount(named: "system_profiler") == 0)
-model.sampleEnergy()
-pump(0.2)
-check("asking for an energy sample starts nothing", childCount(named: "top") == 0)
-pump(2.5)
-check("no live app list", model.apps.isEmpty)
+check("energy by app on the Eco schedule", model.energyInterval == AppTracking.eco.interval)
+Settings.shared.appTracking = .frequent
+pump(0.1)
+check("the chosen frequency waits until Minimal energy use is off", model.energyInterval == AppTracking.eco.interval)
+Settings.shared.appTracking = .normal
 
 check("the helper is told to slow down", model.charge.config.minimalEnergy == true)
 model.charge.minimalEnergy = false
@@ -84,6 +84,9 @@ check("closed menu: wattage every minute", model.powerInterval == 60)
 model.popoverShown = true
 check("open menu: battery every 5 seconds", model.refreshInterval == 5)
 check("open menu: wattage back to live", model.powerInterval == AppModel.wattInterval)
+model.tab = .power
+check("no faster Power tab in Minimal energy use", model.refreshInterval == 5 && !model.powerTabLive)
+model.tab = .overview
 model.popoverShown = false
 check("closed again: rare again", model.refreshInterval == 300)
 

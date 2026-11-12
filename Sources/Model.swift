@@ -16,6 +16,7 @@ final class AppModel: ObservableObject {
         didSet {
             if tab == .devices, !Settings.shared.trackDevices { tab = firstTab }
             startBluetoothOnDevicesTab()
+            scheduleSampling()
         }
     }
     /// Вкладки, які показує верхня панель.
@@ -31,11 +32,19 @@ final class AppModel: ObservableObject {
     var breakdownOnScreen = false { didSet { scheduleBreakdown() } }
     @Published var lowPowerBusy = false
     @Published var popoverShown = false { didSet { if popoverShown != oldValue { scheduleSampling(); if popoverShown { refresh() }; startBluetoothOnDevicesTab() } } }
+    /// Вкладка Power на екрані: живий замір енергії по апках кожні 10 с, батарея — кожні 2 с.
+    static let liveEnergyInterval: TimeInterval = 10
+    static let liveRefreshInterval: TimeInterval = 2
+    /// Перший живий замір — коли поповер уже домалювався: інакше top міряє саме відкриття, і апка бачить себе в топі.
+    static let liveEnergyDelay: TimeInterval = 2
     let energy = EnergyMonitor()
     let charge = ChargeControl()
     let ble = BLEBattery()
     private var classicDevices: [BTDevice] = []
     private var energyTimer: Timer?
+    private var liveEnergyTimer: Timer?
+    /// nil — вкладку Power не видно; true — часті заміри; false — один замір при відкритті.
+    private var liveEnergyMode: Bool?
     private var powerTimer: Timer?
     private var breakdownTimer: Timer?
     private let breakdownMonitor = PowerBreakdownMonitor()
@@ -50,6 +59,7 @@ final class AppModel: ObservableObject {
     private var chargeStatus: AnyCancellable?
     private var energyMode: AnyCancellable?
     private var deviceTracking: AnyCancellable?
+    private var trackingMode: AnyCancellable?
     private let deviceQueue = DispatchQueue(label: "sik.devices", qos: .utility)
 
     func start() {
@@ -65,7 +75,11 @@ final class AppModel: ObservableObject {
         ble.onChange = { [weak self] in self?.mergeDevices() }
         energyMode = Settings.shared.$minimalEnergy.dropFirst().receive(on: DispatchQueue.main).sink { [weak self] _ in self?.applyEnergyMode() }
         deviceTracking = Settings.shared.$trackDevices.dropFirst().removeDuplicates().receive(on: DispatchQueue.main).sink { [weak self] _ in self?.applyDeviceTracking() }
+        trackingMode = Settings.shared.$appTracking.combineLatest(Settings.shared.$livePowerTab).dropFirst()
+            .receive(on: DispatchQueue.main).sink { [weak self] _ in self?.scheduleEnergy(); self?.scheduleSampling() }
         applyEnergyMode()
+        // У мінімальному режимі top на старті не запускаємо: перший замір — за розкладом Eco
+        if !Settings.shared.minimalEnergy { sampleEnergy() }
         updates.onRelease = { [weak self] r in self?.alerts.announceUpdate(r) }
         updates.start()
     }
@@ -73,19 +87,13 @@ final class AppModel: ObservableObject {
     /// Запускає або зупиняє все фонове під перемикач «Minimal energy use».
     private func applyEnergyMode() {
         let minimal = Settings.shared.minimalEnergy
-        energyTimer?.invalidate(); energyTimer = nil
         charge.minimalEnergy = minimal
         charge.setVisible(popoverShown)
         applyDeviceTracking()
         if minimal {
-            apps = []
             wattHistory = []
-        } else {
-            // Енергію по апках пишемо раз на 2 хв у фоні; поки поповер відкритий — частіше.
-            sampleEnergy()
-            energyTimer = Timer.scheduledTimer(withTimeInterval: 120, repeats: true) { [weak self] _ in self?.sampleEnergy() }
-            energyTimer?.tolerance = 20
         }
+        scheduleEnergy()
         scheduleSampling()
     }
 
@@ -111,6 +119,16 @@ final class AppModel: ObservableObject {
         deviceTimer?.tolerance = 15
     }
 
+    var energyInterval: TimeInterval { Settings.shared.effectiveAppTracking.interval }
+
+    /// Заміри за розкладом — єдині, що йдуть в історію. Крок не залежить від поповера, тож години рівномірні.
+    private func scheduleEnergy() {
+        guard energyTimer?.timeInterval != energyInterval else { return }
+        energyTimer?.invalidate()
+        energyTimer = Timer.scheduledTimer(withTimeInterval: energyInterval, repeats: true) { [weak self] _ in self?.sampleEnergy() }
+        energyTimer?.tolerance = energyInterval / 6
+    }
+
     private var devicesOnScreen: Bool { popoverShown && tab == .devices }
 
     private func startBluetoothOnDevicesTab() {
@@ -119,9 +137,11 @@ final class AppModel: ObservableObject {
 
     /// Мінімальний режим пригальмовує лише фон: відкритий поповер показує свіжі числа, бо на них дивляться.
     private var sampleRarely: Bool { Settings.shared.minimalEnergy && !popoverShown }
+    /// Часті оновлення на вкладці Power: можна вимкнути в налаштуваннях, а мінімальний режим їх не вмикає.
+    var powerTabLive: Bool { popoverShown && tab == .power && Settings.shared.livePowerTab && !Settings.shared.minimalEnergy }
     /// Заряд і так приходить сповіщенням IOPS, таймер лише страхує.
     /// Поки поповер відкритий, заряд, що щойно почався, видно за секунди.
-    var refreshInterval: TimeInterval { sampleRarely ? 300 : (popoverShown ? 5 : 20) }
+    var refreshInterval: TimeInterval { sampleRarely ? 300 : powerTabLive ? Self.liveRefreshInterval : (popoverShown ? 5 : 20) }
     var powerInterval: TimeInterval { sampleRarely ? 60 : Self.wattInterval }
 
     private func scheduleSampling() {
@@ -132,6 +152,25 @@ final class AppModel: ObservableObject {
         }
         if let t = powerTimer, t.timeInterval != powerInterval { t.invalidate(); startPowerTimer() }
         scheduleBreakdown()
+        scheduleLiveEnergy()
+    }
+
+    private func scheduleLiveEnergy() {
+        let mode: Bool? = popoverShown && tab == .power ? powerTabLive : nil
+        guard mode != liveEnergyMode else { return }
+        liveEnergyMode = mode
+        liveEnergyTimer?.invalidate(); liveEnergyTimer = nil
+        guard let mode else { return }
+        // Свіжий замір уже є — на перемиканні вкладок top удруге не запускаємо
+        let fresh = energy.lastSample.map { Date().timeIntervalSince($0) < Self.liveEnergyInterval } ?? false
+        if fresh && !mode { return }
+        liveEnergyTimer = Timer.scheduledTimer(withTimeInterval: fresh ? Self.liveEnergyInterval : Self.liveEnergyDelay, repeats: false) { [weak self] _ in
+            guard let self else { return }
+            self.sampleLive()
+            guard mode else { self.liveEnergyTimer = nil; return }
+            self.liveEnergyTimer = Timer.scheduledTimer(withTimeInterval: Self.liveEnergyInterval, repeats: true) { [weak self] _ in self?.sampleLive() }
+            self.liveEnergyTimer?.tolerance = 1
+        }
     }
 
     private func scheduleBreakdown() {
@@ -157,9 +196,14 @@ final class AppModel: ObservableObject {
         powerTimer = Timer.scheduledTimer(withTimeInterval: powerInterval, repeats: true) { [weak self] _ in self?.samplePower() }
     }
 
+    /// Замір за розкладом: іде в історію.
     func sampleEnergy() {
-        guard !Settings.shared.minimalEnergy else { return }
-        energy.sample { [weak self] in self?.apps = self?.energy.apps ?? [] }
+        energy.sample(record: true) { [weak self] in self?.apps = self?.energy.apps ?? [] }
+    }
+
+    /// Живий замір для відкритої вкладки Power: лише список зараз, без історії.
+    private func sampleLive() {
+        energy.sample(record: false) { [weak self] in self?.apps = self?.energy.apps ?? [] }
     }
 
     /// ПКМ перемикає енергозбереження, лише коли це не спитає пароль; інакше відкриває поповер, як і ЛКМ.

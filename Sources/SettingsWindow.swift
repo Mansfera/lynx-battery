@@ -137,7 +137,7 @@ struct GeneralSettings: View {
 
     var body: some View {
         let hasBattery = model.battery != nil
-        SettingsPane(height: hasBattery ? 612 : 402) {
+        SettingsPane(height: hasBattery ? 772 : 562) {
             Section {
                 Toggle("Open at login", isOn: $s.launchAtLogin)
                 if hasBattery {
@@ -169,6 +169,22 @@ struct GeneralSettings: View {
                     RightClickLowPowerToggle(control: model.charge, s: s)
                 }
             } header: { SectionHead("Menu bar") }
+            Section {
+                Picker(selection: Binding(get: { s.effectiveAppTracking }, set: { s.appTracking = $0 })) {
+                    ForEach(AppTracking.allCases) { Text($0.rawValue).tag($0) }
+                } label: {
+                    Text("Energy by app")
+                    Text(s.minimalEnergy ? "Eco while Minimal energy use is on." : s.appTracking.detail)
+                }
+                .disabled(s.minimalEnergy)
+                Toggle(isOn: Binding(get: { s.livePowerTab && !s.minimalEnergy }, set: { s.livePowerTab = $0 })) {
+                    Text("Live Power tab")
+                    Text(s.minimalEnergy ? "Off while Minimal energy use is on."
+                         : hasBattery ? "While the Power tab is open, the power flow updates every 2 seconds and energy by app every 10 seconds."
+                         : "While the Power tab is open, energy by app updates every 10 seconds.")
+                }
+                .disabled(s.minimalEnergy)
+            } header: { SectionHead("Power tracking") }
             Section {
                 AppIconPicker(selection: $s.appIcon)
             } header: {

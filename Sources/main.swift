@@ -46,7 +46,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, Set
         }
     }
 
-    func applicationWillTerminate(_ n: Notification) { model.history.save() }
+    func applicationWillTerminate(_ n: Notification) { model.history.save(); model.energy.save() }
 
     // LSUIElement не в Dock: повторний клік у Finder / Spotlight / Launchpad має відкрити поповер.
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {

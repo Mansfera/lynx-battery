@@ -47,21 +47,31 @@ final class EnergyMonitor {
         }
     }
 
-    func sample(_ done: @escaping () -> Void) {
+    /// Коли востаннє закінчився замір, будь-який.
+    private(set) var lastSample: Date?
+    private var lastSave = Date()
+    private var recordNext = false
+
+    /// record — замір за розкладом, і лише він іде в історію: так години рівномірні в часі,
+    /// а часті живі заміри при відкритому поповері не роздувають частку апок, що працюють саме тоді (і нашої теж).
+    func sample(record: Bool, _ done: @escaping () -> Void) {
+        if record { recordNext = true }
         guard !busy else { return }
         busy = true
         queue.async { [weak self] in
             guard let self else { return }
             let procs = Self.readTop()
             DispatchQueue.main.async {
-                self.ingest(procs)
+                self.ingest(procs, record: self.recordNext)
+                self.recordNext = false
+                self.lastSample = Date()
                 self.busy = false
                 done()
             }
         }
     }
 
-    func ingest(_ procs: [(pid: Int32, cmd: String, power: Double)]) {
+    func ingest(_ procs: [(pid: Int32, cmd: String, power: Double)], record: Bool = true) {
         var groups: [String: (impact: Double, path: String?, procs: [(String, Double)])] = [:]
         // Умова відсікає й nan та inf: Double() їх розбирає, а JSON зберегти вже не зможе.
         for p in procs where p.power > 0 && p.power <= Self.maxPower {
@@ -84,12 +94,15 @@ final class EnergyMonitor {
         }
 
         // Погодинні суми для 24 год / 7 / 30 днів
-        let hourStart = Calendar.current.dateInterval(of: .hour, for: Date())!.start
-        if hours.last?.t != hourStart { hours.append(Hour(t: hourStart, totals: [:], n: 0)) }
-        for (name, g) in groups { hours[hours.count - 1].totals[name, default: 0] += g.impact }
-        hours[hours.count - 1].n += 1
-        hours.removeAll { $0.t < Date().addingTimeInterval(-30 * 86_400) }
-        if hours[hours.count - 1].n % 10 == 1 { save() }
+        if record {
+            let hourStart = Calendar.current.dateInterval(of: .hour, for: Date())!.start
+            if hours.last?.t != hourStart { hours.append(Hour(t: hourStart, totals: [:], n: 0)) }
+            for (name, g) in groups { hours[hours.count - 1].totals[name, default: 0] += g.impact }
+            hours[hours.count - 1].n += 1
+            hours.removeAll { $0.t < Date().addingTimeInterval(-30 * 86_400) }
+            // За часом, а не за числом замірів: у Eco їх лише 4 на годину
+            if Date().timeIntervalSince(lastSave) >= 20 * 60 { save() }
+        }
 
         let avg = averages(.month)
         apps = groups.map { name, g in
@@ -121,6 +134,7 @@ final class EnergyMonitor {
     }
 
     func save() {
+        lastSave = Date()
         if let d = try? JSONEncoder().encode(hours) { try? d.write(to: url, options: .atomic) }
     }
 

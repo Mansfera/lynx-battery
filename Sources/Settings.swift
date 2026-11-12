@@ -38,6 +38,28 @@ enum IconStyle: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+/// Як часто міряти енергію по апках. Кожен замір — запуск top на ~1 с, тож рідше — дешевше.
+enum AppTracking: String, CaseIterable, Identifiable {
+    case frequent = "Frequent"
+    case normal = "Normal"
+    case eco = "Eco"
+    var id: String { rawValue }
+    var interval: TimeInterval {
+        switch self {
+        case .frequent: 120
+        case .normal: 300
+        case .eco: 900
+        }
+    }
+    var detail: String {
+        switch self {
+        case .frequent: "Every 2 minutes. The finest history, at the highest cost."
+        case .normal: "Every 5 minutes. Enough for the 24-hour, 7-day and 30-day averages."
+        case .eco: "Every 15 minutes. Still builds the history, at the lowest cost. Minimal energy use always uses this."
+        }
+    }
+}
+
 struct DeviceRule: Codable, Equatable {
     var low: Int = 15          // 0 = не сповіщати
     var full: Bool = false     // сповістити, коли зарядився до 100%
@@ -75,7 +97,12 @@ final class Settings: ObservableObject {
     @Published var heatAlert: Bool { didSet { d.set(heatAlert, forKey: "heat") } }
     /// ПКМ по іконці перемикає енергозбереження. Працює лише з хелпером, бо він не просить пароля.
     @Published var rightClickLowPower: Bool { didSet { d.set(rightClickLowPower, forKey: "rightClickLowPower") } }
-    /// Мінімум енергії: без замірів по апках, анімацій і Bluetooth, решта читається рідше. Ліміт заряду й сповіщення лишаються.
+    @Published var appTracking: AppTracking { didSet { d.set(appTracking.rawValue, forKey: "appTracking") } }
+    /// Поки відкрита вкладка Power, потужність і енергія по апках оновлюються частіше.
+    @Published var livePowerTab: Bool { didSet { d.set(livePowerTab, forKey: "livePowerTab") } }
+    /// Мінімальний режим не вимикає заміри по апках, а переводить їх на найрідший крок.
+    var effectiveAppTracking: AppTracking { minimalEnergy ? .eco : appTracking }
+    /// Мінімум енергії: енергія по апках у режимі Eco, без анімацій і Bluetooth, решта читається рідше. Ліміт заряду й сповіщення лишаються.
     @Published var minimalEnergy: Bool { didSet { d.set(minimalEnergy, forKey: "minimalEnergy") } }
     /// Вимкнено — ні вкладки Devices, ні опитування пристроїв, ні Bluetooth, ні їхніх сповіщень.
     @Published var trackDevices: Bool { didSet { d.set(trackDevices, forKey: "trackDevices") } }
@@ -114,6 +141,7 @@ final class Settings: ObservableObject {
             "icon": IconStyle.inside.rawValue, "colors": true,
             "animate": true, "persistent": false, "heat": true, "trackDevices": true,
             "updateCheck": true, "updateAlert": true,
+            "appTracking": AppTracking.normal.rawValue, "livePowerTab": true,
         ])
         lowAlerts = Set(d.array(forKey: "low") as? [Int] ?? [])
         highAlerts = Set(d.array(forKey: "high") as? [Int] ?? [])
@@ -136,6 +164,8 @@ final class Settings: ObservableObject {
         trackDevices = d.bool(forKey: "trackDevices")
         updateCheck = d.bool(forKey: "updateCheck")
         updateAlert = d.bool(forKey: "updateAlert")
+        appTracking = AppTracking(rawValue: d.string(forKey: "appTracking") ?? "") ?? .normal
+        livePowerTab = d.bool(forKey: "livePowerTab")
         deviceRules = (d.data(forKey: "deviceRules")).flatMap { try? JSONDecoder().decode([String: DeviceRule].self, from: $0) } ?? [:]
     }
 }
