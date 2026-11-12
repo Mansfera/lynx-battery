@@ -125,7 +125,6 @@ final class EnergyMonitor {
         return sum.mapValues { $0 / Double(n) }
     }
 
-    /// Топ апок за проміжок з часткою від загального.
     func top(_ r: HistoryRange, limit: Int = 8) -> [(name: String, share: Double, path: String?)] {
         let a = averages(r)
         let total = a.values.reduce(0, +)

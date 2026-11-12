@@ -53,7 +53,7 @@ do {
     check("launching on a full battery stays quiet", started.update([100], full), none)
 }
 
-// True charge і macOS: стеля 100, поведінка як досі, хоч designTop і 88
+// True charge і macOS: стеля 100, хоч designTop і 88
 do {
     var h = HighAlertTracker()
     check("true: 90 is not 95", h.update([95, 100], snap(90, top: 100)), none)

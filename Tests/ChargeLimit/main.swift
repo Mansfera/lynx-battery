@@ -109,7 +109,7 @@ for domain in [fromDomain, toDomain] {
     try? FileManager.default.removeItem(at: file)
 }
 
-// LYN-14: 37° при межі 35° — заряд стоїть рівно, без перемикань щосекунди
+// 37° при межі 35° — заряд стоїть рівно, без перемикань щосекунди
 var heat = HeatGuard()
 let t0 = Date()
 func heatAt(_ temp: Double?, _ mac: Int, _ seconds: TimeInterval, plugged: Bool = true) -> Int? {

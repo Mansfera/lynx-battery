@@ -25,14 +25,11 @@ enum MenuIcon {
             let body = NSRect(x: 0.5, y: (16 - bodyH) / 2, width: bodyW, height: bodyH)
             let radius: CGFloat = 4
 
-            // Корпус
             base.withAlphaComponent(showNumber ? 0.16 : 0.22).setFill()
             NSBezierPath(roundedRect: body, xRadius: radius, yRadius: radius).fill()
-            // Пипка
             base.withAlphaComponent(0.4).setFill()
             NSBezierPath(roundedRect: NSRect(x: body.maxX + 0.8, y: body.midY - 2.2, width: 1.8, height: 4.4), xRadius: 0.9, yRadius: 0.9).fill()
 
-            // Заповнення
             let fillW = max(2.5, body.width * CGFloat(b.percent) / 100)
             let fillRect = NSRect(x: body.minX, y: body.minY, width: fillW, height: body.height)
             ctx.saveGState()

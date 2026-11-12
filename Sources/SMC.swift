@@ -1,7 +1,7 @@
 import Foundation
 import IOKit
 
-// Мінімальний читач SMC — лише щоб дістати температуру батареї (у ioreg її більше немає).
+// Мінімальний доступ до SMC: температура батареї, струм заряду й потужність, яких немає в ioreg.
 private struct SMCVersion { var major: UInt8 = 0, minor: UInt8 = 0, build: UInt8 = 0, reserved: UInt8 = 0, release: UInt16 = 0 }
 private struct SMCPLimitData { var version: UInt16 = 0, length: UInt16 = 0, cpu: UInt32 = 0, gpu: UInt32 = 0, mem: UInt32 = 0 }
 private struct SMCKeyInfo { var dataSize: UInt32 = 0, dataType: UInt32 = 0, attributes: UInt8 = 0 }

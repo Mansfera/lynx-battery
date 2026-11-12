@@ -19,7 +19,6 @@ final class AppModel: ObservableObject {
             scheduleSampling()
         }
     }
-    /// Вкладки, які показує верхня панель.
     var tabs: [Tab] {
         let all: [Tab] = battery == nil ? [.power, .devices] : Tab.allCases
         return Settings.shared.trackDevices ? all : all.filter { $0 != .devices }

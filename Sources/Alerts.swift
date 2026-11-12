@@ -60,7 +60,6 @@ final class AlertEngine {
             }
         }
 
-        // Низький заряд: спрацьовує, коли рівень опускається до порогу без зарядки.
         if !b.onAC {
             for t in low.sorted() where b.percent <= t && !firedLow.contains(t) {
                 firedLow.formUnion(low.filter { $0 >= t })
@@ -78,7 +77,6 @@ final class AlertEngine {
         }
         firedLow = firedLow.filter { b.percent <= $0 + 2 }   // скидаємо, коли піднялись вище порогу
 
-        // Високий заряд: при зарядці.
         if let t = high.update(s.highAlerts, b) {
             presenter.show(AlertSpec(title: HighAlertTracker.title(t, b),
                                      subtitle: "You can unplug now", symbol: "battery.100percent.bolt", tone: .good))
@@ -162,7 +160,6 @@ final class AlertEngine {
     }
 }
 
-/// Куди клацнули на пігулці.
 enum PillHit: Equatable { case body, close, button(Int) }
 
 // MARK: - Показ
@@ -386,8 +383,6 @@ private struct Stretch: GeometryEffect {
     }
 }
 
-/// Пігулка як у рілсі: важка, тягнеться за курсором, а позаду біжить шлейф контурів-«відлунь»,
-/// що наздоганяють її з різною затримкою (кожен шар — свій, повільніший спринг).
 /// Один контур шлейфу: своя, повільніша пружина — тому відстає від пігулки.
 private struct EchoLayer: View {
     let index: Int
@@ -416,6 +411,8 @@ private struct EchoLayer: View {
     }
 }
 
+/// Пігулка як у рілсі: важка, тягнеться за курсором, а позаду біжить шлейф контурів-«відлунь»,
+/// що наздоганяють її з різною затримкою.
 struct JellyPill: View {
     let spec: AlertSpec
     let onInteract: (Bool) -> Void

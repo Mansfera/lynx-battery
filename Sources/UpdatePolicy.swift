@@ -36,7 +36,7 @@ struct AppVersion: Comparable, CustomStringConvertible {
     static func == (a: AppVersion, b: AppVersion) -> Bool { !(a < b) && !(b < a) }
 }
 
-/// Реліз на GitHub. DMG і його sha256 — для автовстановлення (LYN-13).
+/// Реліз на GitHub. DMG і його sha256 — для автовстановлення.
 struct ReleaseInfo: Codable, Equatable {
     var version: String        // без «v»: 1.2.0
     var tag: String            // як на GitHub: v1.2.0
