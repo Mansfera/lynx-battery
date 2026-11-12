@@ -172,6 +172,21 @@ struct FirmwareHold {
     mutating func reset() { upper = nil }
 }
 
+/// Піднятий ліміт заряджає одразу, не чекаючи, поки заряд спуститься до старої нижньої межі (sailing).
+struct LimitRaise {
+    private var limit: Int?
+    private(set) var active = false
+
+    mutating func update(limit new: Int, shown: Int) {
+        if let old = limit {
+            if new > old && shown < new { active = true }
+            if new < old { active = false }
+        }
+        if shown >= new { active = false }
+        limit = new
+    }
+}
+
 /// Heat Protection: зупиняє заряд, щойно батарея досягла межі, і відпускає лише через 5 хв і після охолодження на `margin`.
 /// Відсоток, на якому зупинились (у розетці), лишається тим самим до кінця паузи: межа, що бігає за зарядом, щоразу перезаписувала б прошивку.
 struct HeatGuard {

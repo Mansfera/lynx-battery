@@ -136,5 +136,23 @@ check("heat: plugging in while hot stops at the plug-in level", heatAt(36, 55, 5
 heat.update(enabled: false, temperature: 40, max: 35, macPercent: 55, plugged: true)
 check("heat: turning it off resumes", heat.stopAt, nil)
 
+// Піднятий ліміт заряджає одразу, навіть між старою й новою межею sailing
+var lr = LimitRaise()
+lr.update(limit: 85, shown: 85)
+check("raise: first reading isn't a raise", lr.active, false)
+lr.update(limit: 89, shown: 85)
+check("raise: 85 → 89 at 85% charges right away", lr.active, true)
+lr.update(limit: 89, shown: 87)
+check("raise: keeps charging on the way up", lr.active, true)
+lr.update(limit: 89, shown: 89)
+check("raise: reaching the new limit ends it", lr.active, false)
+lr.update(limit: 89, shown: 86)
+check("raise: dipping later uses sailing again", lr.active, false)
+lr.update(limit: 92, shown: 86)
+lr.update(limit: 88, shown: 86)
+check("raise: lowering the limit again cancels it", lr.active, false)
+lr.update(limit: 90, shown: 95)
+check("raise: raising to below the charge does nothing", lr.active, false)
+
 print(failures == 0 ? "All passed" : "\(failures) failed")
 exit(failures == 0 ? 0 : 1)

@@ -679,16 +679,56 @@ struct Stepper2: View {
     let step: Int
     let suffix: String
     @Environment(\.palette) private var pal
+    @State private var editing = false
+    @State private var text = ""
+    @FocusState private var focused: Bool
+
     var body: some View {
         HStack(spacing: 0) {
-            Button { value = max(range.lowerBound, value - step) } label: { Image(systemName: "minus").frame(width: 20, height: 20) }
-            Text("\(value)\(suffix)").font(Brand.mono(10.5, .semibold)).frame(minWidth: 30)
-            Button { value = min(range.upperBound, value + step) } label: { Image(systemName: "plus").frame(width: 20, height: 20) }
+            Button { value = max(range.lowerBound, value - step) } label: { hitArea("minus") }
+                .accessibilityLabel("Decrease")
+            Group {
+                if editing {
+                    TextField("", text: $text)
+                        .labelsHidden()
+                        .textFieldStyle(.plain)
+                        .multilineTextAlignment(.center)
+                        .focused($focused)
+                        .onSubmit(commit)
+                        .onExitCommand { editing = false }
+                        .onChange(of: focused) { _, on in if !on { commit() } }
+                } else {
+                    Text("\(value)\(suffix)")
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            text = "\(value)"
+                            editing = true
+                            focused = true
+                        }
+                        .help("Click to type a value")
+                }
+            }
+            .font(Brand.mono(10.5, .semibold))
+            .frame(width: 34, height: 24)
+            Button { value = min(range.upperBound, value + step) } label: { hitArea("plus") }
+                .accessibilityLabel("Increase")
         }
         .buttonStyle(.plain)
         .font(.system(size: 9, weight: .bold))
-        .padding(.horizontal, 2)
         .background(pal.sunk, in: Capsule())
+    }
+
+    private func hitArea(_ symbol: String) -> some View {
+        Image(systemName: symbol)
+            .frame(width: 28, height: 24)
+            .contentShape(Rectangle())
+    }
+
+    private func commit() {
+        guard editing else { return }
+        editing = false
+        if let n = Int(text.filter(\.isNumber)) { value = min(range.upperBound, max(range.lowerBound, n)) }
     }
 }
 

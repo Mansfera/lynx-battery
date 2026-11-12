@@ -142,6 +142,7 @@ var ledValue: UInt8 = 0
 var holding = false           // досягли ліміту й чекаємо, поки спуститься до limit − sailRange
 var draining = false          // розряджаємо до межі; вмикається з запасом, щоб округлення 72↔73 не смикало адаптер
 var hold = FirmwareHold()
+var limitRaise = LimitRaise()
 var wallSince: TimeInterval?   // відколи Mac живиться від розетки, а монітора не видно: його зв'язок піднімається не одразу, зокрема й після сну
 var cutBlockedLogged = false
 var heat = HeatGuard()
@@ -295,6 +296,7 @@ func tick() {
         let plugged = b.onAC || (!adapterOn && !AdapterCut.chargerGone(BatteryReader.powerPorts()))
         heat.update(enabled: cfg.heatProtection, temperature: b.temperature, max: cfg.heatMax, macPercent: b.macPercent, plugged: plugged)
 
+        limitRaise.update(limit: cfg.limit, shown: shown)
         if toFull {
             holding = b.fullyCharged || b.percent >= 100
         } else if firmwareLimit {
@@ -304,6 +306,7 @@ func tick() {
             if shown >= cfg.limit { holding = true }
             if shown <= lower { holding = false }
         }
+        if limitRaise.active { holding = false }
         if toFull || shown <= cfg.limit { draining = false } else if shown > cfg.limit + 1 { draining = true }
         let overLimit = firmwareLimit ? draining : !toFull && shown > cfg.limit + 1
         // Вимкнення адаптера вимикає й монітор чи док на тому ж кабелі: тоді лише не заряджаємо, а розряджається за роботою
@@ -327,6 +330,8 @@ func tick() {
             target = (min(toFirmware(lower), upper - 1), upper)
             // Поки заряджається, округлення не варте перезапису ключів: зупинить перевірка вище. Але межа не вище заряду заряд не пустить
             if hold.upper == nil, scale != .macOS, let cur = firmwareTarget, abs(cur.upper - upper) <= 1, willDrain || cur.upper > b.macPercent { target = cur }
+            // Прошивка між межами сама не почне заряд: піднімаємо нижню межу над зарядом
+            if limitRaise.active, let t = target { target = (max(t.lower, t.upper - 1), t.upper) }
         } else { hold.reset() }
 
         if let at = heat.stopAt {
