@@ -1,18 +1,18 @@
 import AppKit
 import notify
 
-/// Встановлення оновлення: завантажити DMG і підпис, перевірити, віддати хелперу (без пароля) або замінити апку самій.
-/// Хелпер перевіряє все наново: апці він не вірить.
+/// Installing an update: download the DMG and signature, verify them, hand them to the helper (no password) or replace the app itself.
+/// The helper checks everything again: it doesn't trust the app.
 final class UpdateInstaller: ObservableObject {
     enum Phase: Equatable { case idle, working(String), done(String), failed(String) }
     @Published private(set) var phase: Phase = .idle
-    /// Версії, які вже пробували ставити за цей запуск: автоматично — лише раз.
+    /// Versions already tried this launch: automatic install happens only once per version.
     private(set) var attempted: Set<String> = []
     weak var charge: ChargeControl?
     var onInstalled: ((String) -> Void)?
     var onFailed: ((ReleaseInfo) -> Void)?
 
-    let keyPresent = UpdateSignature.publicKey(UpdateKey.publicKey) != nil
+    let keyPresent = UpdateSignature.hasUsableKey(UpdateKey.trusted)
     let homebrew = UpdatePolicy.isHomebrewInstall()
     static let brewCommand = "brew upgrade --cask mansfera/tap/lynx-battery"
 
@@ -70,16 +70,16 @@ final class UpdateInstaller: ObservableObject {
     private func run(_ r: ReleaseInfo) async throws {
         guard let dmgURL = r.dmgURL, let sigURL = r.sigURL, let digest = r.dmgSHA256 else { throw UpdateFailure("the release has no signed DMG") }
         let dmg = try await fetch(dmgURL, max: UpdateInstall.maxDMG)
-        let sigFile = try await fetch(sigURL, max: 1023)
+        let sigFile = try await fetch(sigURL, max: UpdateSignature.maxSignatureFile)
         let sha = UpdateSignature.sha256(dmg)
         guard sha == digest.lowercased() else { throw UpdateFailure("the download doesn't match GitHub's checksum") }
-        guard let sig = UpdateSignature.parseSignatureFile(sigFile),
-              UpdateSignature.verify(signature: sig, sha256: sha, version: r.version, publicKey: UpdateKey.publicKey)
+        guard UpdateSignature.verify(signatureFile: sigFile, sha256: sha, version: r.version, trusted: UpdateKey.trusted) != nil,
+              let sig = String(data: sigFile, encoding: .utf8)
         else { throw UpdateFailure("the update's signature isn't valid") }
 
         let app = Bundle.main.bundleURL.standardizedFileURL.path
         let req = UpdateRequest(id: UUID().uuidString, version: r.version, dmg: "Lynx-Battery-\(r.version).dmg", sha256: sha,
-                                signature: sig.base64EncodedString(), app: app, requestedAt: Date())
+                                signature: sig, app: app, requestedAt: Date())
         phase = .working("Installing \(r.version)…")
         switch route(app) {
         case .helper: try await viaHelper(req, dmg)
@@ -100,7 +100,7 @@ final class UpdateInstaller: ObservableObject {
         return data
     }
 
-    /// Кладемо DMG і запит у теку хелпера й будимо його. Відповідь — файл з тим самим id.
+    /// Put the DMG and request in the helper's folder and wake it. The answer is a file with the same id.
     @MainActor
     private func viaHelper(_ req: UpdateRequest, _ dmg: Data) async throws {
         let dir = ChargePaths.dir
@@ -124,19 +124,19 @@ final class UpdateInstaller: ObservableObject {
         throw UpdateFailure("the helper didn't answer")
     }
 
-    /// Тека апки наша: та сама перевірка, лише без root.
+    /// The app's folder is ours: the same checks, just without root.
     private func inProcess(_ req: UpdateRequest, _ dmg: Data) async throws {
         let tmp = FileManager.default.temporaryDirectory.appendingPathComponent("lynx-update-\(UUID().uuidString)").path
         try FileManager.default.createDirectory(atPath: tmp, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         defer { try? FileManager.default.removeItem(atPath: tmp) }
         try dmg.write(to: URL(fileURLWithPath: tmp + "/" + req.dmg))
         try await Task.detached {
-            try UpdateInstall.install(req, requestDir: tmp, workRoot: tmp, publicKey: UpdateKey.publicKey,
+            try UpdateInstall.install(req, requestDir: tmp, workRoot: tmp, trusted: UpdateKey.trusted,
                                       allowedParent: { _ in true }, log: { NSLog("Lynx Battery: \($0)") })
         }.value
     }
 
-    /// Апка не запуститься, поки жива ця копія (одна копія на бандл), тож чекаємо її виходу окремим процесом і відкриваємо від імені користувача.
+    /// The app won't launch while this copy is alive (one instance per bundle), so a separate process waits for it to exit and opens it as the user.
     static func relaunch() {
         let p = Process()
         p.executableURL = URL(fileURLWithPath: "/bin/sh")

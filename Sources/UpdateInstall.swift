@@ -1,13 +1,13 @@
 import Foundation
 
-/// Запит на встановлення: апка кладе його й DMG у теку хелпера. Хелпер нічому тут не вірить і все перевіряє сам.
+/// An install request: the app puts it and the DMG in the helper's folder. The helper trusts none of it and checks everything itself.
 struct UpdateRequest: Codable, Equatable {
     var id: String
     var version: String
-    var dmg: String          // лише ім'я файлу в теці запиту
+    var dmg: String          // just the file name in the request folder
     var sha256: String
-    var signature: String    // base64
-    var app: String          // яку копію апки замінити
+    var signature: String    // the armored SSHSIG from the .sig file
+    var app: String          // which copy of the app to replace
     var requestedAt: Date
 }
 
@@ -24,7 +24,7 @@ struct UpdateFailure: Error, CustomStringConvertible {
     init(_ s: String) { description = s }
 }
 
-/// Перевірка й заміна апки. Спільне для root-хелпера, апки (без хелпера) і тестів; тека призначення — параметр.
+/// Checking and replacing the app. Shared by the root helper, the app (without the helper) and the tests; the target folder is a parameter.
 enum UpdateInstall {
     static let requestName = "update-request.json"
     static let resultName = "update-result.json"
@@ -33,7 +33,7 @@ enum UpdateInstall {
     static let maxRequest = 16 << 10
     static let maxAge: TimeInterval = 600
 
-    /// Куди хелпер може ставити апку: /Applications або ~/Applications будь-якого користувача.
+    /// Where the helper may install the app: /Applications or any user's ~/Applications.
     static func helperAllowedParent(_ parent: String) -> Bool {
         if parent == "/Applications" { return true }
         let c = parent.split(separator: "/", omittingEmptySubsequences: false)
@@ -56,7 +56,7 @@ enum UpdateInstall {
         return try? dec.decode(t, from: d)
     }
 
-    /// Читає звичайний файл, не йдучи за символьним посиланням, і не більше max байтів.
+    /// Reads a regular file without following a symlink, and no more than max bytes.
     static func readFile(_ path: String, max: Int) throws -> Data {
         let name = (path as NSString).lastPathComponent
         let fd = open(path, O_RDONLY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK)
@@ -72,7 +72,7 @@ enum UpdateInstall {
         return d
     }
 
-    /// Запит читаємо один раз: файл зникає, хай що в ньому.
+    /// A request is read once: the file is removed whatever it holds.
     static func takeRequest(dir: String) throws -> UpdateRequest {
         let path = dir + "/" + requestName
         defer { unlink(path) }
@@ -88,7 +88,7 @@ enum UpdateInstall {
         return (id, v)
     }
 
-    /// Шлях, який замінюємо: абсолютний, без «..» і символьних посилань, у дозволеній теці, і там справді Lynx Battery.
+    /// The path to replace: absolute, no ".." or symlinks, in an allowed folder, and really Lynx Battery.
     static func validateTarget(_ path: String, allowedParent: (String) -> Bool) throws {
         let parts = path.split(separator: "/", omittingEmptySubsequences: false)
         guard path.hasPrefix("/"), path.utf8.count < 1024, !path.contains("\0"), path.hasSuffix(".app"),
@@ -103,7 +103,7 @@ enum UpdateInstall {
         guard try bundleInfo(path).id == UpdateSignature.bundleID else { throw UpdateFailure("the app at that path isn't Lynx Battery") }
     }
 
-    /// Бандл — лише теки й звичайні файли; посилання тільки відносні й лише всередину. Без setuid.
+    /// The bundle holds only folders and regular files; links only relative and only inward. No setuid.
     static func checkBundleTree(_ root: String) throws {
         let fm = FileManager.default
         guard let e = fm.enumerator(atPath: root) else { throw UpdateFailure("can't read the new app") }
@@ -126,7 +126,7 @@ enum UpdateInstall {
         }
     }
 
-    /// Ціль посилання: спершу лише «..», далі лише звичайні імена — тоді фізичний шлях збігається з лексичним.
+    /// Link target: first only "..", then only plain names, so the physical path matches the lexical one.
     static func symlinkStaysInside(rel: String, dest: String) -> Bool {
         guard !dest.isEmpty, !dest.hasPrefix("/") else { return false }
         var depth = rel.split(separator: "/").count - 1
@@ -163,18 +163,19 @@ enum UpdateInstall {
         return o
     }
 
-    /// Повна установка. requestDir — звідки брати DMG, workRoot — приватна тека для копії й точки монтування.
-    static func install(_ r: UpdateRequest, requestDir: String, workRoot: String, publicKey: String,
+    /// The full install. requestDir is where the DMG comes from, workRoot a private folder for the copy and mount point.
+    static func install(_ r: UpdateRequest, requestDir: String, workRoot: String, trusted: [TrustedUpdateKey],
                         allowedParent: (String) -> Bool, now: Date = Date(), log: (String) -> Void) throws {
         let dmgPath = requestDir + "/" + r.dmg
         defer { if isValidDMGName(r.dmg) { unlink(dmgPath) } }
         log("update \(r.version): request \(r.id) for \(r.app)")
 
         guard r.requestedAt > now - maxAge, r.requestedAt < now + 60 else { throw UpdateFailure("the request is stale") }
-        guard !publicKey.isEmpty, UpdateSignature.publicKey(publicKey) != nil else { throw UpdateFailure("this build has no update key") }
+        guard UpdateSignature.hasUsableKey(trusted) else { throw UpdateFailure("this build has no update key") }
         guard isValidDMGName(r.dmg) else { throw UpdateFailure("the DMG name isn't valid") }
         guard let v = AppVersion(r.version), !v.prerelease else { throw UpdateFailure("the version isn't valid") }
-        guard UpdateSignature.isSHA256(r.sha256), let sig = Data(base64Encoded: r.signature), sig.count == UpdateSignature.signatureSize
+        let sig = Data(r.signature.utf8)
+        guard UpdateSignature.isSHA256(r.sha256), UpdateSignature.parse(sig) != nil
         else { throw UpdateFailure("the checksum or signature isn't valid") }
 
         try validateTarget(r.app, allowedParent: allowedParent)
@@ -187,7 +188,7 @@ enum UpdateInstall {
         let work = String(cString: wp)
         defer { try? FileManager.default.removeItem(atPath: work) }
 
-        // Своя копія в приватній теці: файл у теці запиту можна підмінити між перевіркою й монтуванням
+        // Our own copy in a private folder: the file in the request folder could be swapped between the check and the mount
         let data = try readFile(dmgPath, max: maxDMG)
         let dmg = work + "/update.dmg"
         guard FileManager.default.createFile(atPath: dmg, contents: data, attributes: [.posixPermissions: 0o600]) else {
@@ -195,10 +196,10 @@ enum UpdateInstall {
         }
         let sha = UpdateSignature.sha256(data)
         guard sha == r.sha256.lowercased() else { throw UpdateFailure("the DMG checksum doesn't match") }
-        guard UpdateSignature.verify(signature: sig, sha256: sha, version: r.version, publicKey: publicKey) else {
+        guard let signer = UpdateSignature.verify(signatureFile: sig, sha256: sha, version: r.version, trusted: trusted) else {
             throw UpdateFailure("the DMG signature isn't valid")
         }
-        log("update \(r.version): checksum and signature ok")
+        log("update \(r.version): checksum and signature ok (\(signer.label))")
 
         let mounts = work + "/mnt"
         try FileManager.default.createDirectory(atPath: mounts, withIntermediateDirectories: false, attributes: [.posixPermissions: 0o700])
@@ -221,7 +222,7 @@ enum UpdateInstall {
         guard UpdatePolicy.isNewer(info.version, than: installed) else { throw UpdateFailure("\(info.version) isn't newer than \(installed)") }
         log("update \(r.version): bundle ok")
 
-        // Поруч зі старою, на тому ж томі: тоді заміна — один атомарний обмін
+        // Next to the old one, on the same volume, so the replacement is one atomic swap
         let parent = (r.app as NSString).deletingLastPathComponent
         let staged = parent + "/." + (r.app as NSString).lastPathComponent + ".update-" + UUID().uuidString.prefix(8)
         try? FileManager.default.removeItem(atPath: staged)
@@ -242,18 +243,18 @@ enum UpdateInstall {
             throw UpdateFailure("couldn't swap the app: \(String(cString: strerror(errno)))")
         }
         log("update \(r.version): installed at \(r.app)")
-        // Стара версія тепер на місці staged — її прибирає defer
+        // The old version is now at staged, and the defer removes it
     }
 
-    /// Те, що робить хелпер на сповіщення: забрати запит, встановити, записати відповідь.
+    /// What the helper does on a notification: take the request, install, write the result.
     @discardableResult
-    static func handleRequest(dir: String, workRoot: String, publicKey: String,
+    static func handleRequest(dir: String, workRoot: String, trusted: [TrustedUpdateKey],
                               allowedParent: (String) -> Bool, log: (String) -> Void) -> UpdateResult? {
         let r: UpdateRequest
         do { r = try takeRequest(dir: dir) } catch { log("update: \(error)"); return nil }
         var result = UpdateResult(id: r.id, version: r.version, ok: true, message: "Updated to \(r.version)")
         do {
-            try install(r, requestDir: dir, workRoot: workRoot, publicKey: publicKey, allowedParent: allowedParent, log: log)
+            try install(r, requestDir: dir, workRoot: workRoot, trusted: trusted, allowedParent: allowedParent, log: log)
         } catch {
             log("update \(r.version): refused — \(error)")
             result.ok = false

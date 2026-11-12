@@ -268,7 +268,7 @@ func tick() {
     var st = ChargeStatus(percent: shown, temperature: b.temperature)
     st.capabilities = (canInhibit && chieRole != .unknown || hasCHTE || hasCH0B ? ["charge-inhibit"] : [])
         + (canCutAdapter ? ["adapter"] : []) + (hasLED ? ["led"] : []) + (firmwareLimit ? ["firmware-limit"] : [])
-        + (UpdateKey.publicKey.isEmpty ? [] : ["app-update"])
+        + (UpdateSignature.hasUsableKey(UpdateKey.trusted) ? ["app-update"] : [])
 
     // What we want: stop — don't charge; drain — also turn the adapter off to go down to the limit
     var stop = false, drain = false
@@ -419,7 +419,7 @@ func checkUpdateRequest() {
     guard !updateBusy, fm.fileExists(atPath: ChargePaths.dir + "/" + UpdateInstall.requestName) else { return }
     updateBusy = true
     updateQueue.async {
-        UpdateInstall.handleRequest(dir: ChargePaths.dir, workRoot: NSTemporaryDirectory(), publicKey: UpdateKey.publicKey,
+        UpdateInstall.handleRequest(dir: ChargePaths.dir, workRoot: NSTemporaryDirectory(), trusted: UpdateKey.trusted,
                                     allowedParent: UpdateInstall.helperAllowedParent, log: { s in log(s) })
         DispatchQueue.main.async { updateBusy = false; checkUpdateRequest() }
     }

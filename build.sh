@@ -29,8 +29,8 @@ swiftc Helper/main.swift Sources/SMC.swift Sources/Battery.swift Sources/ChargeC
     -framework IOKit -swift-version 5 -target arm64-apple-macos14.0 -O
 
 cp Info.plist "$APP/Contents/Info.plist"
-# Перевірка оновлень вручну: SIMULATE_VERSION=1.0.0 ./build.sh збирає апку, що вважає себе старою.
-# Міняє лише копію Info.plist у збірці; release.sh цю змінну скидає.
+# Testing updates by hand: SIMULATE_VERSION=1.0.0 ./build.sh builds an app that thinks it is old.
+# Changes only the copy of Info.plist in the build; release.sh clears this variable.
 if [ -n "${SIMULATE_VERSION:-}" ]; then
     /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $SIMULATE_VERSION" "$APP/Contents/Info.plist"
     echo "⚠️  Simulating version $SIMULATE_VERSION"

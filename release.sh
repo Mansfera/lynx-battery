@@ -3,13 +3,17 @@ set -euo pipefail
 V="${1:?usage: ./release.sh <version>, e.g. 1.2.3}"
 cd "$(dirname "$0")"
 
-# Підпис DMG ключем з Keychain (make-update-key.sh). Без ключа реліз не робимо: апки з автовстановленням його не приймуть.
+# Releases are signed with a YubiKey release key (add-release-key.sh). Without one, installed copies won't auto-install the release.
+SSHKEYGEN="${SSHKEYGEN:-$(command -v /opt/homebrew/bin/ssh-keygen || command -v ssh-keygen)}"
 mkdir -p build
-swiftc Tools/SignUpdate/main.swift Sources/UpdateSignature.swift Sources/UpdatePolicy.swift Sources/UpdateKey.swift \
-    -o build/sign-update -swift-version 5 -target arm64-apple-macos14.0
-KEY="$(security find-generic-password -s com.mansfera.lynxbattery.update-signing -a release -w)" \
-    || { echo "No update signing key in the Keychain: run ./make-update-key.sh first."; exit 1; }
-printf '%s' "$KEY" | build/sign-update check
+swiftc Tools/UpdateSig/main.swift Sources/UpdateSignature.swift Sources/UpdatePolicy.swift Sources/UpdateKey.swift \
+    -o build/update-sig -swift-version 5 -target arm64-apple-macos14.0
+KEYS=()
+for k in "$HOME"/.ssh/lynx_release_*; do
+    case "$k" in *.pub) continue ;; esac
+    [ -f "$k" ] && [ -f "$k.pub" ] && build/update-sig trusted "$k.pub" >/dev/null 2>&1 && KEYS+=("$k")
+done
+[ ${#KEYS[@]} -gt 0 ] || { echo "No ~/.ssh/lynx_release_* key that Sources/UpdateKey.swift trusts: run ./add-release-key.sh first."; exit 1; }
 
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $V" Info.plist
 BUILD=$(( $(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" Info.plist) + 1 ))
@@ -24,8 +28,18 @@ DMG="dist/Lynx-Battery-$V.dmg"
 hdiutil create -volname "Lynx Battery" -srcfolder build/dmg -ov -format UDZO "$DMG" >/dev/null
 SHA=$(shasum -a 256 "$DMG" | cut -d' ' -f1)
 echo "DMG $DMG  sha256 $SHA"
-printf '%s' "$KEY" | build/sign-update sign "$DMG" "$V" > "$DMG.sig"
-unset KEY
+# Whichever YubiKey is plugged in signs: the one that isn't fails fast, and the next key file is tried
+build/update-sig message "$DMG" "$V" > "build/Lynx-Battery-$V.msg"
+rm -f "build/Lynx-Battery-$V.msg.sig" "$DMG.sig"
+for k in "${KEYS[@]}"; do
+    echo "Signing with $(build/update-sig trusted "$k.pub"): enter the YubiKey's PIN and touch it when it blinks."
+    if "$SSHKEYGEN" -Y sign -f "$k" -n lynx-battery-update "build/Lynx-Battery-$V.msg"; then
+        mv "build/Lynx-Battery-$V.msg.sig" "$DMG.sig"
+        break
+    fi
+done
+[ -f "$DMG.sig" ] || { echo "Couldn't sign with any release key: is a YubiKey from Sources/UpdateKey.swift plugged in?"; exit 1; }
+build/update-sig verify "$DMG" "$V" "$DMG.sig" >/dev/null || { echo "The signature doesn't verify: not releasing."; exit 1; }
 echo "Signed $DMG.sig"
 
 git add Info.plist

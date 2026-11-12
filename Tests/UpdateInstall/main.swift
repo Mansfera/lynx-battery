@@ -1,8 +1,8 @@
 import Foundation
 import CryptoKit
 
-// Установка оновлення від початку до кінця, як її робить хелпер: справжні DMG (hdiutil), підпис тестовим ключем,
-// заміна апки в тимчасовій «Applications». Без root, без хелпера, справжньої /Applications не чіпає.
+// The update install end to end, as the helper does it: real DMGs (hdiutil), SSHSIG signatures from throwaway release keys,
+// replacing the app in a temporary "Applications". No root, no helper, the real /Applications is left alone.
 
 var failures = 0
 func check<T: Equatable>(_ name: String, _ got: T, _ want: T) {
@@ -19,9 +19,8 @@ let apps = root + "/Applications", reqDir = root + "/req", work = root + "/work"
 for d in [apps, reqDir, work, build] { try! fm.createDirectory(atPath: d, withIntermediateDirectories: true) }
 let app = apps + "/Lynx Battery.app"
 
-let key = Curve25519.Signing.PrivateKey()
-let pub = key.publicKey.rawRepresentation.base64EncodedString()
-let wrongKey = Curve25519.Signing.PrivateKey()
+let key1 = SKSigner(), key2 = SKSigner(), wrongKey = SKSigner()
+let trusted = [key1.trusted("yubikey 1"), key2.trusted("yubikey 2")]
 
 func sh(_ exe: String, _ args: String...) { _ = try! UpdateInstall.run(exe, args) }
 
@@ -36,7 +35,7 @@ func makeApp(_ path: String, id: String = UpdateSignature.bundleID, version: Str
     sh("/usr/bin/codesign", "--force", "--deep", "--sign", "-", path)
 }
 
-/// DMG як у release.sh: апка й посилання на /Applications.
+/// A DMG like release.sh makes: the app and a link to /Applications.
 func makeDMG(_ name: String, appName: String = UpdateInstall.appName, id: String = UpdateSignature.bundleID, version: String,
              tweak: (String) -> Void = { _ in }) -> String {
     let stage = build + "/stage-\(name)"
@@ -52,21 +51,21 @@ func makeDMG(_ name: String, appName: String = UpdateInstall.appName, id: String
 func installedVersion() -> String? { try? UpdateInstall.bundleInfo(app).version }
 
 var logLines: [String] = []
-/// Кладе DMG у теку запиту й запускає те, що запускає хелпер.
-func attempt(dmg: String, version: String, signVersion: String? = nil, signer: Curve25519.Signing.PrivateKey = key,
-             dmgName: String? = nil, target: String = app, publicKey: String? = nil, age: TimeInterval = 0,
-             claimSHA: String? = nil, placeDMG: ((String, String) -> Void)? = nil) -> UpdateResult? {
+/// Puts the DMG in the request folder and runs what the helper runs.
+func attempt(dmg: String, version: String, signVersion: String? = nil, signer: SKSigner = key1,
+             dmgName: String? = nil, target: String = app, keys: [TrustedUpdateKey] = trusted, age: TimeInterval = 0,
+             claimSHA: String? = nil, signature: String? = nil, placeDMG: ((String, String) -> Void)? = nil) -> UpdateResult? {
     let name = dmgName ?? "Lynx-Battery-\(version).dmg"
     let data = fm.contents(atPath: dmg)!
     let sha = UpdateSignature.sha256(data)
-    let sig = UpdateSignature.sign(sha256: sha, version: signVersion ?? version, with: signer) ?? Data(count: 64)
+    let sig = signature ?? String(data: signer.sign(sha256: sha, version: signVersion ?? version), encoding: .utf8)!
     if let placeDMG { placeDMG(dmg, reqDir + "/" + name) }
     else if UpdateInstall.isValidDMGName(name) { fm.createFile(atPath: reqDir + "/" + name, contents: data) }
     let req = UpdateRequest(id: UUID().uuidString, version: version, dmg: name, sha256: claimSHA ?? sha,
-                            signature: sig.base64EncodedString(), app: target, requestedAt: Date().addingTimeInterval(-age))
+                            signature: sig, app: target, requestedAt: Date().addingTimeInterval(-age))
     fm.createFile(atPath: reqDir + "/" + UpdateInstall.requestName, contents: UpdateInstall.encode(req))
     logLines = []
-    let r = UpdateInstall.handleRequest(dir: reqDir, workRoot: work, publicKey: publicKey ?? pub,
+    let r = UpdateInstall.handleRequest(dir: reqDir, workRoot: work, trusted: keys,
                                         allowedParent: { $0 == apps }, log: { logLines.append($0) })
     check("  request answered with its id", r?.id, req.id)
     check("  request file consumed", fm.fileExists(atPath: reqDir + "/" + UpdateInstall.requestName), false)
@@ -88,7 +87,7 @@ func refused(_ name: String, _ r: UpdateResult?, _ reason: String) {
 makeApp(app, version: "1.0.0")
 let good = makeDMG("good", version: "1.2.0")
 
-// Відмови — до успішної установки, поки стоїть 1.0.0
+// Refusals first, while 1.0.0 is installed
 refused("tampered DMG (checksum from before)", attempt(dmg: good, version: "1.2.0", placeDMG: { src, dst in
     var d = fm.contents(atPath: src)!; d[d.count / 2] ^= 0xFF; fm.createFile(atPath: dst, contents: d)
 }), "checksum doesn't match")
@@ -101,7 +100,10 @@ refused("tampered DMG with a matching checksum but the old signature", attempt(d
 }), "signature isn't valid")
 refused("signed by another key", attempt(dmg: good, version: "1.2.0", signer: wrongKey), "signature isn't valid")
 refused("signature for another version", attempt(dmg: good, version: "1.2.0", signVersion: "1.2.1"), "signature isn't valid")
-refused("no compiled-in key", attempt(dmg: good, version: "1.2.0", publicKey: ""), "no update key")
+refused("signed by a key not in this build", attempt(dmg: good, version: "1.2.0", signer: key2, keys: [key1.trusted("yubikey 1")]), "signature isn't valid")
+refused("no compiled-in key", attempt(dmg: good, version: "1.2.0", keys: []), "no update key")
+refused("a junk signature", attempt(dmg: good, version: "1.2.0", signature: "hello"), "signature isn't valid")
+refused("an old-style base64 signature", attempt(dmg: good, version: "1.2.0", signature: Data(count: 64).base64EncodedString()), "signature isn't valid")
 refused("stale request", attempt(dmg: good, version: "1.2.0", age: 3600), "stale")
 refused("DMG name with ..", attempt(dmg: good, version: "1.2.0", dmgName: "../Lynx-Battery-1.2.0.dmg"), "DMG name")
 refused("DMG is a symlink", attempt(dmg: good, version: "1.2.0", placeDMG: { src, dst in
@@ -127,7 +129,7 @@ try! fm.createSymbolicLink(atPath: root + "/AppsLink", withDestinationPath: apps
 refused("target through a symlink", attempt(dmg: good, version: "1.2.0", target: root + "/AppsLink/Lynx Battery.app"), "symlink")
 try! fm.removeItem(atPath: apps + "/Other")
 
-// Справжня установка
+// The real install
 print("good update 1.0.0 → 1.2.0")
 let oldInode = (try? fm.attributesOfItem(atPath: app))?[.systemFileNumber] as? Int
 let r = attempt(dmg: good, version: "1.2.0")
@@ -137,14 +139,22 @@ check("  new version in place", installedVersion(), "1.2.0")
 check("  it's a new folder, not edited in place", ((try? fm.attributesOfItem(atPath: app))?[.systemFileNumber] as? Int) != oldInode, true)
 check("  code signature intact", (try? UpdateInstall.run("/usr/bin/codesign", ["--verify", "--deep", "--strict", app])) != nil, true)
 check("  DMG removed from the request folder", (try? fm.contentsOfDirectory(atPath: reqDir))?.filter { $0.hasSuffix(".dmg") } ?? ["?"], [])
+check("  says which key signed", logLines.contains { $0.contains("checksum and signature ok (yubikey 1)") }, true)
 check("  every step logged", ["target ok", "checksum and signature ok", "mounted read-only", "bundle ok", "copied", "installed at"]
     .allSatisfy { step in logLines.contains { $0.contains(step) } }, true)
 check("  no Lynx DMG left attached", (String(data: (try? UpdateInstall.run("/usr/bin/hdiutil", ["info"])) ?? Data(), encoding: .utf8) ?? "").contains(work), false)
 
+print("a newer update signed by the other YubiKey 1.2.0 → 1.3.0")
+let newer = makeDMG("newer", version: "1.3.0")
+let r2 = attempt(dmg: newer, version: "1.3.0", signer: key2)
+check("  installed", r2?.ok, true)
+check("  new version in place", installedVersion(), "1.3.0")
+check("  says which key signed", logLines.contains { $0.contains("(yubikey 2)") }, true)
+
 print("the same update again")
-let again = attempt(dmg: good, version: "1.2.0")
+let again = attempt(dmg: newer, version: "1.3.0")
 check("  refused once installed", again?.ok, false)
-check("  stays on 1.2.0", installedVersion(), "1.2.0")
+check("  stays on 1.3.0", installedVersion(), "1.3.0")
 
 print(failures == 0 ? "\nAll passed" : "\n\(failures) failed")
 exit(failures == 0 ? 0 : 1)

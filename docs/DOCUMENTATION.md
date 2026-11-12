@@ -121,13 +121,13 @@ Checks happen at most once an hour, even across restarts. Offline or rate-limite
 
 ### How updates are verified
 
-Every release is signed with the developer's Ed25519 key, and the public half is built into the app and the helper. Before anything is replaced, the app checks the DMG against GitHub's sha256 and the signature (`Lynx-Battery-<v>.dmg.sig`), which covers the bundle ID, the version and the DMG's sha256. Then:
+Every release is signed with a hardware key on one of the developer's two YubiKeys: an OpenSSH FIDO2 key (`sk-ssh-ed25519@openssh.com`, application `ssh:lynx-release`) that never leaves the YubiKey and needs its PIN and a touch for every signature. Both public keys are built into the app and the helper (`Sources/UpdateKey.swift`), so either YubiKey can sign. The signature (`Lynx-Battery-<v>.dmg.sig`) is an `ssh-keygen -Y sign` signature in the `lynx-battery-update` namespace over the bundle ID, the version and the DMG's sha256. The app and the helper verify it themselves with CryptoKit, without ssh-keygen: the key must be one of the built-in ones (application included), the hash SHA-512, and the YubiKey's touch and PIN flags must both be set. Before anything is replaced, the app checks the DMG against GitHub's sha256 and the signature. Then:
 
-- **With the charge-limit helper**, no password is needed. The app drops the DMG and a request into the helper's folder and pings it. The helper trusts none of it and checks everything again on its own copy: the signature with its built-in key, the sha256, a request under 10 minutes old, a DMG file name with no path in it, and a target that is a real Lynx Battery app in `/Applications` or `~/Applications` with no symlinks on the way. It mounts the DMG read-only, accepts only `com.mansfera.lynxbattery` at exactly the signed version and newer than the installed one, and rejects symlinks pointing out of the bundle, setuid files and broken code signatures. The new app is copied next to the old one with the same owner and swapped in with one atomic rename; the old copy is deleted only after the swap. Each step goes to the helper log. The app then quits and opens itself again as you.
+- **With the charge-limit helper**, no password is needed. The app drops the DMG and a request into the helper's folder and pings it. The helper trusts none of it and checks everything again on its own copy: the signature with its built-in keys, the sha256, a request under 10 minutes old, a DMG file name with no path in it, and a target that is a real Lynx Battery app in `/Applications` or `~/Applications` with no symlinks on the way. It mounts the DMG read-only, accepts only `com.mansfera.lynxbattery` at exactly the signed version and newer than the installed one, and rejects symlinks pointing out of the bundle, setuid files and broken code signatures. The new app is copied next to the old one with the same owner and swapped in with one atomic rename; the old copy is deleted only after the swap. Each step goes to the helper log. The app then quits and opens itself again as you.
 - **Without the helper**, the app runs the same checks itself if it can write to its own folder (usual for an admin user in `/Applications`). Otherwise it can't replace itself without a password, so the banner offers Download.
 - **Installed with Homebrew** (a `Caskroom/lynx-battery` folder exists), it never replaces itself, so Homebrew keeps knowing which version is installed. The banner says to run `brew upgrade --cask mansfera/tap/lynx-battery` and copies the command.
 
-A build without a signing key (`Sources/UpdateKey.swift` empty) can't verify anything, so automatic install is greyed out in Settings and the banner and alert only offer Download.
+A build without release keys (the list in `Sources/UpdateKey.swift` empty) can't verify anything, so automatic install is greyed out in Settings and the banner and alert only offer Download.
 
 ## Settings
 
@@ -221,15 +221,17 @@ Tests/desktop-mode.sh       # Macs without a battery [png folder]
 Tests/right-click.sh        # right-click only toggles Low Power Mode without a password [png folder]
 Tests/device-tracking.sh    # Track devices off stops device reads and Bluetooth [png folder]
 Tests/update-check.sh       # version comparison, GitHub release parsing, banner and alert rules
-Tests/update-verify.sh      # update signatures (throwaway key), request paths, Homebrew detection
+Tests/update-verify.sh      # update signatures (throwaway keys, checked against ssh-keygen), request paths, Homebrew detection
 Tests/update-install.sh     # the helper's install end to end with real DMGs, into a temp folder
 ```
 
 ### Releasing
 
-Once per Mac before the first signed release, run `./make-update-key.sh`. It makes an Ed25519 key pair, keeps the private key in your login Keychain (`com.mansfera.lynxbattery.update-signing`) and writes the public key into `Sources/UpdateKey.swift`, which you commit. Back the private key up (Keychain Access → "Lynx Battery update signing key"): installed copies only accept updates signed with it. On another Mac, add the same key to the Keychain under that name first and the script reuses it. After the key changes, reinstall the helper from the Charge tab, since the helper has the key built in.
+Releases are signed with a FIDO2 key on each of two YubiKeys, so either one can sign and a lost one isn't the end. You need Homebrew's OpenSSH (`brew install openssh`; macOS's own `ssh-keygen` can't talk to a YubiKey) and a FIDO2 PIN on each YubiKey (`ykman fido access change-pin`).
 
-`./release.sh 1.0.1` checks the signing key first and stops if it's missing or doesn't match `UpdateKey.swift`. Then it sets the version, builds the app, packages and signs the DMG, creates the GitHub release with the DMG and its `.sig`, and updates the cask in [Mansfera/homebrew-tap](https://github.com/Mansfera/homebrew-tap) from `Homebrew/lynx-battery.rb`.
+Once per YubiKey, insert just that one and run `./add-release-key.sh 1`, then with the other `./add-release-key.sh 2`. Each run makes a resident, PIN-protected key (`ssh-keygen -t ed25519-sk -O resident -O verify-required -O application=ssh:lynx-release`), saves the key handle as `~/.ssh/lynx_release_<n>` and adds its public key to `Sources/UpdateKey.swift`, which you commit. Running it again with a key that's already there changes nothing. The key handle files aren't secret without the YubiKey and its PIN, but back them up; because the key is resident, you can also get them back on any Mac with `ssh-keygen -K` and the YubiKey. These keys are separate from any key you use for git. After the keys change, reinstall the helper from the Charge tab, since the helper has them built in.
+
+`./release.sh 1.0.1` first checks that a `~/.ssh/lynx_release_*` key it trusts exists, and stops otherwise. Then it sets the version, builds the app and packages the DMG, and signs it with whichever YubiKey is plugged in (enter the PIN and touch it). It checks the `.sig` with the same verifier the app uses before it creates the GitHub release with the DMG and its `.sig`, and updates the cask in [Mansfera/homebrew-tap](https://github.com/Mansfera/homebrew-tap) from `Homebrew/lynx-battery.rb`.
 
 ### Icons
 
