@@ -84,6 +84,23 @@ check("rate: quiet is idle", PowerActivity.rate(500) == "Idle")
 check("rate: kilobytes", PowerActivity.rate(20 * 1024) == "20 KB/s")
 check("rate: megabytes", PowerActivity.rate(3.5 * 1024 * 1024) == "3.5 MB/s")
 
+// Потік живлення в Power: стрічки разом — рівно те, що входить
+func flowSnap(ac: Bool, charging: Bool, watts: Double, system: Double, input: Double) -> PowerFlow {
+    BatterySnapshot(percent: 60, isCharging: charging, onAC: ac, fullyCharged: false, minutes: nil, watts: watts,
+                    adapterWatts: ac ? 35 : nil, cycles: 0, designCycles: 1000, designCapacity: 1000, fullCapacity: 1000,
+                    temperature: nil, systemWatts: system, inputWatts: input, lowPower: false).flow
+}
+let stale = flowSnap(ac: true, charging: true, watts: 22.15, system: 23.55, input: 32.7)
+check("charging: battery and Mac add up to the input", near(stale.total, 32.7) && near(stale.toBattery, 22.15) && near(stale.adapterToMac, 10.55))
+let weak = flowSnap(ac: true, charging: true, watts: 20, system: 5, input: 12)
+check("charging: input below the charge is raised, never a negative Mac", near(weak.total, 20) && near(weak.adapterToMac, 0))
+let resting = flowSnap(ac: true, charging: false, watts: 0, system: 9.9, input: 9.9)
+check("holding on the adapter: all of it goes to the Mac", near(resting.total, 9.9) && near(resting.adapterToMac, 9.9) && resting.toBattery == 0)
+let topUp = flowSnap(ac: true, charging: false, watts: -6, system: 30, input: 24)
+check("adapter plus battery feed the Mac together", near(topUp.adapterToMac, 24) && near(topUp.batteryToMac, 6) && near(topUp.total, 30))
+let unplugged = flowSnap(ac: false, charging: false, watts: -8, system: 7.5, input: 0)
+check("on battery: the Mac lives on the battery alone", near(unplugged.total, 8) && unplugged.adapterToMac == 0)
+
 // Живе читання: без root і на справжньому чипі
 let monitor = PowerBreakdownMonitor()
 var live: PowerBreakdown?

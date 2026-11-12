@@ -36,6 +36,16 @@ struct BatterySnapshot: Equatable {
     /// Зарядка справді не тягне: Mac споживає майже все, що дає адаптер. Потужність невідома — вважаємо, що так.
     var chargerTooWeak: Bool { drainingOnAC && adapterWatts.map { systemWatts >= Double($0) * 0.8 } ?? true }
 
+    /// Куди йде живлення. На адаптері все рахуємо від входу: Mac отримує те, що лишилося після батареї
+    /// (разом із втратами зарядки всередині Mac), тож потоки завжди дорівнюють входу, а не трьом окремим замірам.
+    var flow: PowerFlow {
+        // Без адаптера Mac живе лише від батареї, навіть якщо струм ще не оновився (буває до хвилини)
+        guard onAC else { return PowerFlow(toBattery: 0, adapterToMac: 0, batteryToMac: max(-watts, systemWatts)) }
+        let toBattery = isCharging ? max(0, watts) : 0
+        let input = max(inputWatts, toBattery)
+        return PowerFlow(toBattery: toBattery, adapterToMac: input - toBattery, batteryToMac: max(0, -watts))
+    }
+
     var needsService: Bool { health > 0 && (health < 80 || cycles >= designCycles) }
 
     var health: Int {
@@ -73,6 +83,13 @@ struct BatterySnapshot: Equatable {
         if let m = minutes { return "On battery · \(formatMinutes(m)) left" }
         return "On battery · estimating…"
     }
+}
+
+struct PowerFlow: Equatable {
+    var toBattery: Double
+    var adapterToMac: Double
+    var batteryToMac: Double
+    var total: Double { toBattery + adapterToMac + batteryToMac }
 }
 
 /// Які високі пороги вже спрацювали: кожен сповіщає один раз, поки заряд не впаде нижче нього.
@@ -164,9 +181,12 @@ enum BatteryReader {
         var charging = flag("IsCharging")
         let ac = flag("ExternalConnected")
         var mA = Double(num("InstantAmperage") ?? num("Amperage") ?? 0)
+        var liveInput: Double?
         // AppleSmartBattery оновлює ці поля раз на хвилину, а заряд починається й зупиняється за секунди
         if ac, !flag("FullyCharged"), let current = SMC.shared.chargeCurrent() {
             (charging, mA) = liveCharge(current: current, amperage: mA)
+            // Вхід — з того самого моменту, що й струм: хвилинний PowerTelemetryData із живим струмом не сходиться
+            liveInput = SMC.shared.read("PDTR").flatMap { $0.isFinite && $0 > 0 && $0 < 1000 ? $0 : nil }
         }
 
         var minutes: Int?
@@ -185,6 +205,10 @@ enum BatteryReader {
         if load <= 0 { load = Swift.max(0, -battW) }
         var input = telW("SystemPowerIn")
         if input <= 0 && ac { input = Swift.max(0, load + battW) }
+        if let liveInput {
+            input = liveInput
+            load = Swift.max(0, input - battW)
+        }
 
         return BatterySnapshot(
             percent: Swift.min(100, Swift.max(0, percent)),

@@ -950,25 +950,24 @@ struct PowerFlowStage: View {
 
     var body: some View {
         let warn = b.chargerTooWeak
+        let flow = b.flow
         Stage {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
                     Text("Power flow").font(Brand.text(11, .medium)).foregroundStyle(pal.fg.opacity(0.6))
                     Spacer()
-                    Text(String(format: "%.1f W total", b.onAC ? max(b.inputWatts, b.systemWatts) : b.systemWatts))
+                    Text(String(format: "%.1f W total", flow.total))
                         .font(Brand.text(11)).foregroundStyle(pal.fg.opacity(0.6))
                 }
-                Sankey(adapterToBattery: b.onAC && b.isCharging ? max(0, b.watts) : 0,
-                       adapterToMac: b.onAC ? max(0, b.systemWatts - max(0, -b.watts)) : 0,
-                       // Без адаптера Mac живе лише від батареї, навіть якщо струм ще не оновився (буває до хвилини)
-                       batteryToMac: b.onAC ? max(0, -b.watts) : max(-b.watts, b.systemWatts),
+                Sankey(adapterToBattery: flow.toBattery,
+                       adapterToMac: flow.adapterToMac,
+                       batteryToMac: flow.batteryToMac,
                        onAC: b.onAC,
                        adapterLabel: b.adapterWatts.map { "\($0)W" } ?? String(format: "%.0fW", b.inputWatts),
                        pal: pal,
                        animating: animating)
                     .frame(height: 150)
-                    .animation(.interpolatingSpring(stiffness: 120, damping: 16), value: b.watts)
-                    .animation(.interpolatingSpring(stiffness: 120, damping: 16), value: b.systemWatts)
+                    .animation(.interpolatingSpring(stiffness: 120, damping: 16), value: flow)
                 if holdingOnWall {
                     Text("Holding the limit: the adapter runs the Mac and the battery is resting.")
                         .font(Brand.text(11)).foregroundStyle(Color(nsColor: .systemBlue)).fixedSize(horizontal: false, vertical: true)
