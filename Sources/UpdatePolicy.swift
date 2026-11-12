@@ -44,6 +44,8 @@ struct ReleaseInfo: Codable, Equatable {
     var dmgURL: URL?
     var dmgSHA256: String?
     var publishedAt: Date?
+    /// Підпис DMG ключем розробника (Lynx-Battery-<v>.dmg.sig). Без нього автовстановлення немає.
+    var sigURL: URL? = nil
 }
 
 enum UpdatePolicy {
@@ -90,8 +92,33 @@ enum UpdatePolicy {
               let v = AppVersion(r.tag_name), !v.prerelease else { return nil }
         let dmg = r.assets?.first { $0.name.hasSuffix(".dmg") }
         let sha = dmg?.digest.flatMap { $0.hasPrefix("sha256:") ? String($0.dropFirst(7)) : nil }
+        let sig = dmg.flatMap { d in r.assets?.first { $0.name == d.name + ".sig" } }
         return ReleaseInfo(version: v.description, tag: r.tag_name, url: r.html_url,
                            dmgURL: dmg?.browser_download_url, dmgSHA256: sha,
-                           publishedAt: r.published_at.flatMap { ISO8601DateFormatter().date(from: $0) })
+                           publishedAt: r.published_at.flatMap { ISO8601DateFormatter().date(from: $0) },
+                           sigURL: sig?.browser_download_url)
+    }
+
+    static func isSHA256(_ s: String) -> Bool { s.utf8.count == 64 && s.allSatisfy(\.isHexDigit) }
+
+    static let caskrooms = ["/opt/homebrew/Caskroom/lynx-battery", "/usr/local/Caskroom/lynx-battery"]
+
+    /// Встановлено через cask: оновлює brew, інакше він не знатиме, яка версія стоїть.
+    static func isHomebrewInstall(caskrooms: [String] = caskrooms, exists: (String) -> Bool = { FileManager.default.fileExists(atPath: $0) }) -> Bool {
+        caskrooms.contains(where: exists)
+    }
+
+    /// Чи можна взагалі встановити цей реліз самим: є ключ, підпис, дайджест, і це не cask.
+    static func canInstall(_ r: ReleaseInfo?, keyPresent: Bool, homebrew: Bool) -> Bool {
+        guard let r, keyPresent, !homebrew else { return false }
+        return r.dmgURL != nil && r.sigURL != nil && r.dmgSHA256.map(isSHA256) == true
+    }
+
+    /// Автовстановлення: одна спроба на версію за запуск, далі — банер і сповіщення.
+    static func shouldAutoInstall(_ r: ReleaseInfo?, current: String, checkOn: Bool, autoOn: Bool,
+                                  keyPresent: Bool, homebrew: Bool, attempted: Set<String>) -> Bool {
+        guard checkOn, autoOn, let r, isNewer(r.version, than: current),
+              canInstall(r, keyPresent: keyPresent, homebrew: homebrew) else { return false }
+        return !attempted.contains(r.version)
     }
 }

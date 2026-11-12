@@ -236,7 +236,7 @@ struct AlertSettings: View {
 
     var body: some View {
         let hasBattery = model.battery != nil
-        SettingsPane(height: hasBattery ? 1000 : 582) {
+        SettingsPane(height: hasBattery ? 1070 : 652) {
             if hasBattery {
                 Section {
                     VStack(alignment: .leading, spacing: 8) {
@@ -295,6 +295,15 @@ struct AlertSettings: View {
                     Text("Once per version. Stays until you click or close it, even with Keep alerts off.")
                 }
                 .disabled(!s.updateCheck)
+                let installer = model.installer
+                let canAuto = installer.keyPresent && !installer.homebrew
+                Toggle(isOn: Binding(get: { s.updateCheck && canAuto && s.autoInstall }, set: { s.autoInstall = $0 })) {
+                    Text("Install updates automatically")
+                    Text(installer.homebrew ? "Installed with Homebrew, so brew updates it: \(UpdateInstaller.brewCommand)."
+                         : !installer.keyPresent ? "Not available in this build: it has no update signing key, so it can't verify downloads."
+                         : "Checks the release's signature, replaces the app and relaunches it. With the charge-limit helper, no password.")
+                }
+                .disabled(!s.updateCheck || !canAuto)
             } header: { SectionHead("Updates") }
         }
     }

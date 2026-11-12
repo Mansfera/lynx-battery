@@ -6,7 +6,7 @@ cd "$(dirname "$0")/.."
 TMP="$(mktemp -d)"
 HELPER_PID=""
 trap '[ -n "$HELPER_PID" ] && kill "$HELPER_PID" 2>/dev/null; rm -rf "$TMP"' EXIT
-swiftc Helper/main.swift Sources/SMC.swift Sources/Battery.swift Sources/ChargeConfig.swift -D HELPER_TEST \
+swiftc Helper/main.swift Sources/SMC.swift Sources/Battery.swift Sources/ChargeConfig.swift Sources/UpdatePolicy.swift Sources/UpdateSignature.swift Sources/UpdateKey.swift Sources/UpdateInstall.swift -D HELPER_TEST \
     -o "$TMP/helper" -framework IOKit -swift-version 5 -target arm64-apple-macos14.0
 DIR="$TMP/data"; mkdir -p "$DIR"
 LIVE="/Library/Application Support/com.mansfera.lynxbattery"

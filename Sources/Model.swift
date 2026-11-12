@@ -52,6 +52,7 @@ final class AppModel: ObservableObject {
     let history = HistoryStore()
     let alerts = AlertEngine()
     let updates = UpdateChecker()
+    let installer = UpdateInstaller()
     var onChange: (() -> Void)?
     private var timer: Timer?
     private var deviceTimer: Timer?
@@ -80,8 +81,24 @@ final class AppModel: ObservableObject {
         applyEnergyMode()
         // У мінімальному режимі top на старті не запускаємо: перший замір — за розкладом Eco
         if !Settings.shared.minimalEnergy { sampleEnergy() }
-        updates.onRelease = { [weak self] r in self?.alerts.announceUpdate(r) }
+        installer.charge = charge
+        installer.onInstalled = { [weak self] v in self?.alerts.announceInstalled(v) }
+        installer.onFailed = { [weak self] _ in self?.updates.announceIfNeeded() }
+        updates.autoInstall = { [weak self] r in self?.autoInstallIfNeeded(r) ?? false }
+        updates.onRelease = { [weak self] r in
+            guard let self else { return }
+            self.alerts.announceUpdate(r, onInstall: self.installer.canInstall(r) ? { [weak self] in self?.installer.install(r) } : nil)
+        }
         updates.start()
+    }
+
+    private func autoInstallIfNeeded(_ r: ReleaseInfo) -> Bool {
+        let s = Settings.shared
+        guard UpdatePolicy.shouldAutoInstall(r, current: updates.current, checkOn: s.updateCheck, autoOn: s.autoInstall,
+                                             keyPresent: installer.keyPresent, homebrew: installer.homebrew,
+                                             attempted: installer.attempted), !installer.busy else { return false }
+        installer.install(r)
+        return true
     }
 
     /// Запускає або зупиняє все фонове під перемикач «Minimal energy use».

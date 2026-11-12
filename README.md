@@ -57,10 +57,20 @@ Don't need it? Turn off Track devices in Settings → Alerts. The Devices tab di
 A draggable pill with jelly physics, a screen-edge glow, and a full-screen alert at critical levels. Low and high thresholds are yours to set.
 
 ### Updates
-Settings → Alerts → Updates has two switches, both on by default:
+Settings → Alerts → Updates has three switches. The first two are on by default:
 
 - **Check for new versions:** asks GitHub for the latest release about 15 seconds after launch, then every 8 hours, and after waking if a check is due. A newer version shows as a banner at the top of the menu, with Download (opens the release page) and a close button that hides the banner until the next version. Drafts and pre-releases are skipped.
 - **Alert about new versions:** an alert pill, once per version. It stays until you click it, which opens the release page, or close it with × (or fling it away), whatever **Keep alerts until clicked** says. Closing it offers to turn these alerts off. If a battery or device alert comes in meanwhile, the update alert steps aside and comes back after.
+
+- **Install updates automatically** (off by default): when a new version shows up, the app downloads it, checks it, replaces itself and relaunches, with a short "Updated to X — relaunching" alert. Off, the banner and the alert get an **Install** button that does the same once. If it fails, the banner says why and offers Download instead.
+
+Every release is signed with the developer's Ed25519 key, and the public half is built into the app and the helper. Before anything is replaced, the app checks the DMG against GitHub's sha256 and the signature (`Lynx-Battery-<v>.dmg.sig`), which covers the bundle ID, the version and the DMG's sha256. Then:
+
+- **With the charge-limit helper**, no password. The app drops the DMG and a request into the helper's folder and pings it. The helper trusts none of it and checks everything again on its own copy: the signature with its built-in key, the sha256, a request under 10 minutes old, a DMG file name with no path in it, and a target that is a real `Lynx Battery` app in `/Applications` or `~/Applications` with no symlinks on the way. It mounts the DMG read-only, refuses anything but `com.mansfera.lynxbattery` at exactly the signed version and newer than the installed one, and rejects symlinks pointing out of the bundle, setuid files and broken code signatures. The new app is copied next to the old one with the same owner and swapped in with one atomic rename; the old copy is deleted only after the swap. Each step goes to the helper log. The app then quits and opens itself again as you.
+- **Without the helper**, the app does the same checks itself if it can write to its own folder (usual for an admin in `/Applications`). Otherwise it can't replace itself without a password, so the banner offers Download.
+- **Installed with Homebrew** (`Caskroom/lynx-battery` exists), it never replaces itself, so brew keeps knowing which version is installed. The banner says to run `brew upgrade --cask mansfera/tap/lynx-battery` and copies the command.
+
+A build without a signing key (`Sources/UpdateKey.swift` empty) can't verify anything, so automatic install is greyed out in Settings and the banner and alert only offer Download.
 
 The request is anonymous: `GET api.github.com/repos/Mansfera/lynx-battery/releases/latest` with a `LynxBattery/<version>` User-Agent and nothing else about you or your Mac. The ETag is kept, so an unchanged answer doesn't count toward GitHub's rate limit, and checks happen at most once an hour even across restarts. Offline or rate-limited, it tries again later without saying anything.
 
@@ -95,6 +105,7 @@ A new limit or setting applies within a second. The app saves it and then pings 
 | Limit settings and status | `/Library/Application Support/com.mansfera.lynxbattery/` |
 | History and energy data | `~/Library/Application Support/com.mansfera.lynxbattery/` |
 | Helper log | `/var/log/lynx-battery-helper.log` |
+| Update request, DMG and result (briefly) | `/Library/Application Support/com.mansfera.lynxbattery/update-request.json`, `Lynx-Battery-<v>.dmg`, `update-result.json` |
 
 Coming from an Etherlynx Battery build, settings and history move over on first launch. The old helper keeps running until you install the new one from the Charge tab, which brings the limit settings across and removes the old helper. Open at login needs turning on again, and macOS asks for Bluetooth access again when you open the Devices tab.
 
@@ -120,15 +131,19 @@ Tests/desktop-mode.sh   # Macs without a battery, renders each screen to PNG
 Tests/power-breakdown.sh # the macOS row's power breakdown, renders it to PNG
 Tests/device-tracking.sh # Track devices off stops device reads and Bluetooth, on brings them back
 Tests/update-check.sh   # version comparison, GitHub release parsing, when the banner and alert show
+Tests/update-verify.sh  # update signatures (throwaway key), request paths, Homebrew detection, when to auto-install
+Tests/update-install.sh # the helper's install end to end: real DMGs, tampered and downgraded ones refused, into a temp folder
 ```
 
-None of these touch the settings, history or charge limit of the installed app.
+None of these touch the settings, history or charge limit of the installed app, or the app in `/Applications`.
 
 To try the no-battery mode on a MacBook, `SIMULATE_NO_BATTERY=1 ./build.sh` builds the app as if it had no battery, and `SIMULATE_NO_BATTERY=no-watts` also hides the power keys. It's a compile flag, so normal builds don't contain it.
 
 To try the update banner and alert, `SIMULATE_VERSION=1.0.0 ./build.sh` builds an app that reports itself as 1.0.0. It only changes the built bundle's `Info.plist`, and `release.sh` unsets it. The alert shows once per version, so to see it again run `defaults delete com.mansfera.lynxbattery updateAlerted` (and `updateDismissed` for the banner, `updateCheckedAt` to check again right away) before relaunching.
 
-To publish a version, `./release.sh 1.0.1` builds the app, packages the DMG, creates the GitHub release and updates the cask in [Mansfera/homebrew-tap](https://github.com/Mansfera/homebrew-tap) from `Homebrew/lynx-battery.rb`.
+Once per Mac before the first signed release, run `./make-update-key.sh`. It makes an Ed25519 key pair, keeps the private key in your login Keychain (`com.mansfera.lynxbattery.update-signing`) and writes the public key into `Sources/UpdateKey.swift`, which you commit. Back the private key up (Keychain Access → "Lynx Battery update signing key"): installed copies only accept updates signed with it. On another Mac, add the same key to the Keychain under that name first, and the script reuses it. After the key changes, reinstall the helper from the Charge tab (Helper update), since the helper has the key built in.
+
+To publish a version, `./release.sh 1.0.1` checks the signing key first and stops if it's missing or doesn't match `UpdateKey.swift`. Then it builds the app, packages and signs the DMG, creates the GitHub release with the DMG and its `.sig`, and updates the cask in [Mansfera/homebrew-tap](https://github.com/Mansfera/homebrew-tap) from `Homebrew/lynx-battery.rb`.
 
 The icons are generated by `Resources/Icons/generate.py`. To rebuild them, run `Resources/Icons/build-icons.sh`, which needs Xcode 26 or later, ImageMagick and `shapely`. The results are committed, so `build.sh` needs none of this.
 

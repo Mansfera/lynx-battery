@@ -24,7 +24,7 @@ swiftc Sources/*.swift ${SIM[@]+"${SIM[@]}"} \
     -O
 
 mkdir -p "$APP/Contents/Library/LaunchServices"
-swiftc Helper/main.swift Sources/SMC.swift Sources/Battery.swift Sources/ChargeConfig.swift \
+swiftc Helper/main.swift Sources/SMC.swift Sources/Battery.swift Sources/ChargeConfig.swift Sources/UpdatePolicy.swift Sources/UpdateSignature.swift Sources/UpdateKey.swift Sources/UpdateInstall.swift \
     -o "$APP/Contents/Library/LaunchServices/com.mansfera.lynxbattery.helper" \
     -framework IOKit -swift-version 5 -target arm64-apple-macos14.0 -O
 

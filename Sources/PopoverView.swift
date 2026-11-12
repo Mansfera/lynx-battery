@@ -75,7 +75,7 @@ struct MainPage: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             TopBar(model: model).fixedSize(horizontal: false, vertical: true).layoutPriority(2)
-            UpdateBanner(updates: model.updates).fixedSize(horizontal: false, vertical: true).layoutPriority(2)
+            UpdateBanner(updates: model.updates, installer: model.installer).fixedSize(horizontal: false, vertical: true).layoutPriority(2)
             FitScroll {
                 Group {
                     if let b = model.battery {
@@ -101,31 +101,72 @@ struct MainPage: View {
 /// Нова версія на GitHub: над вкладками, щоб видно було з будь-якої. Хрестик ховає банер до наступної версії.
 struct UpdateBanner: View {
     @ObservedObject var updates: UpdateChecker
+    @ObservedObject var installer: UpdateInstaller
     @ObservedObject private var settings = Settings.shared
     @Environment(\.palette) private var pal
 
     var body: some View {
-        if let r = updates.available {
+        if let r = updates.available ?? (installer.phase != .idle ? updates.latest : nil) {
             Panel {
                 HStack(spacing: 10) {
                     VStack(alignment: .leading, spacing: 2) {
-                        Text("Lynx Battery \(r.version) is out").font(Brand.text(12.5, .medium))
-                        Text("You have \(updates.current).")
-                            .font(Brand.text(10.5)).foregroundStyle(pal.muted).fixedSize(horizontal: false, vertical: true)
+                        Text(title(r)).font(Brand.text(12.5, .medium))
+                        Text(detail)
+                            .font(Brand.text(10.5)).foregroundStyle(failed ? Brand.signal : pal.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .textSelection(.enabled)
                     }
+                    .contentShape(Rectangle())
+                    .onTapGesture { NSWorkspace.shared.open(r.url) }
+                    .help("Open the release page")
                     Spacer()
-                    InkPill(title: "Download", symbol: "arrow.down") { NSWorkspace.shared.open(r.url) }
-                    Button { updates.dismissBanner() } label: {
-                        Image(systemName: "xmark").font(.system(size: 9, weight: .bold)).foregroundStyle(pal.muted)
-                            .frame(width: 22, height: 22)
-                            .background(pal.sunk, in: Circle())
-                            .contentShape(Circle())
+                    action(r)
+                    if !installer.busy {
+                        Button { updates.dismissBanner() } label: {
+                            Image(systemName: "xmark").font(.system(size: 9, weight: .bold)).foregroundStyle(pal.muted)
+                                .frame(width: 22, height: 22)
+                                .background(pal.sunk, in: Circle())
+                                .contentShape(Circle())
+                        }
+                        .buttonStyle(.plain)
+                        .help("Hide until the next version")
+                        .accessibilityLabel("Hide until the next version")
                     }
-                    .buttonStyle(.plain)
-                    .help("Hide until the next version")
-                    .accessibilityLabel("Hide until the next version")
                 }
             }
+        }
+    }
+
+    private var failed: Bool { if case .failed = installer.phase { true } else { false } }
+
+    private func title(_ r: ReleaseInfo) -> String {
+        if case .done(let v) = installer.phase { return "Updated to \(v)" }
+        return "Lynx Battery \(r.version) is out"
+    }
+
+    private var detail: String {
+        switch installer.phase {
+        case .working(let s): return s
+        case .done: return "Relaunching…"
+        case .failed(let msg): return msg
+        case .idle:
+            return installer.homebrew ? "Installed with Homebrew: update with brew so it keeps track." : "You have \(updates.current)."
+        }
+    }
+
+    @ViewBuilder private func action(_ r: ReleaseInfo) -> some View {
+        if installer.busy {
+            ProgressView().controlSize(.small)
+        } else if installer.homebrew {
+            InkPill(title: "Copy brew command", symbol: "doc.on.doc") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(UpdateInstaller.brewCommand, forType: .string)
+            }
+            .help(UpdateInstaller.brewCommand)
+        } else if installer.canInstall(r) && !failed {
+            InkPill(title: "Install", symbol: "arrow.down") { installer.install(r) }
+        } else {
+            InkPill(title: "Download", symbol: "arrow.down") { NSWorkspace.shared.open(r.url) }
         }
     }
 }

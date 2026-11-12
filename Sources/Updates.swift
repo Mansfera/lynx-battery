@@ -9,6 +9,8 @@ final class UpdateChecker: ObservableObject {
     @Published private(set) var dismissed: String? { didSet { d.set(dismissed, forKey: Keys.dismissed) } }
     /// Новий реліз, про який ще не сповіщали. Викликається на головному потоці.
     var onRelease: ((ReleaseInfo) -> Void)?
+    /// Почати автовстановлення; true — почали, тоді сповіщення про нову версію не треба.
+    var autoInstall: ((ReleaseInfo) -> Bool)?
 
     let current: String = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0"
     private let d = UserDefaults.standard
@@ -47,6 +49,8 @@ final class UpdateChecker: ObservableObject {
         Settings.shared.$updateCheck.removeDuplicates().receive(on: DispatchQueue.main)
             .sink { [weak self] on in self?.apply(on) }.store(in: &bag)
         Settings.shared.$updateAlert.dropFirst().removeDuplicates().receive(on: DispatchQueue.main)
+            .sink { [weak self] on in if on { self?.announceIfNeeded() } }.store(in: &bag)
+        Settings.shared.$autoInstall.dropFirst().removeDuplicates().receive(on: DispatchQueue.main)
             .sink { [weak self] on in if on { self?.announceIfNeeded() } }.store(in: &bag)
         // Після сну таймер міг проспати строк — перевіряємо одразу, якщо пора
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
@@ -112,8 +116,9 @@ final class UpdateChecker: ObservableObject {
         announceIfNeeded()
     }
 
-    private func announceIfNeeded() {
+    func announceIfNeeded() {
         let s = Settings.shared
+        if let r = latest, autoInstall?(r) == true { return }
         guard let r = latest, UpdatePolicy.shouldAlert(r, current: current, checkOn: s.updateCheck, alertsOn: s.updateAlert, alerted: alerted) else { return }
         markAlerted(r)
         onRelease?(r)

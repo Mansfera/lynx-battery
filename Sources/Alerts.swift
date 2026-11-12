@@ -131,17 +131,25 @@ final class AlertEngine {
     }
 
     /// Нова версія: висить, доки не клацнуть (відкриває реліз) або не закриють (тоді пропонуємо вимкнути такі сповіщення).
-    func announceUpdate(_ r: ReleaseInfo) {
-        presenter.show(AlertSpec(title: "Lynx Battery \(r.version)", subtitle: "A new version is out · click to download",
-                                 symbol: "arrow.down", tone: .neutral, closable: true), sticky: true) { [weak self] hit in
+    /// onInstall — кнопка Install, коли реліз можна встановити самим.
+    func announceUpdate(_ r: ReleaseInfo, onInstall: (() -> Void)? = nil) {
+        presenter.show(AlertSpec(title: "Lynx Battery \(r.version)",
+                                 subtitle: onInstall == nil ? "A new version is out · click to download" : "A new version is out · click for what's new",
+                                 symbol: "arrow.down", tone: .neutral, buttons: onInstall == nil ? [] : ["Install"], closable: true),
+                       sticky: true) { [weak self] hit in
             switch hit {
             case .body: NSWorkspace.shared.open(r.url)
             case .close:
                 // Після того як пігулка відлетить
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self?.offerToMuteUpdates() }
-            case .button: break
+            case .button: onInstall?()
             }
         }
+    }
+
+    func announceInstalled(_ version: String) {
+        presenter.show(AlertSpec(title: "Updated to \(version)", subtitle: "Relaunching…", symbol: "checkmark", tone: .good),
+                       hideAfter: 2.5, quiet: true) { _ in }
     }
 
     private func offerToMuteUpdates() {

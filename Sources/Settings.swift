@@ -110,6 +110,8 @@ final class Settings: ObservableObject {
     @Published var updateCheck: Bool { didSet { d.set(updateCheck, forKey: "updateCheck") } }
     /// Сповіщення-пігулка про нову версію; висить, доки не клацнуть або не закриють.
     @Published var updateAlert: Bool { didSet { d.set(updateAlert, forKey: "updateAlert") } }
+    /// Самому завантажити, перевірити підпис і замінити апку. З хелпером — без пароля.
+    @Published var autoInstall: Bool { didSet { d.set(autoInstall, forKey: "autoInstall") } }
     @Published var deviceRules: [String: DeviceRule] {
         didSet { d.set(try? JSONEncoder().encode(deviceRules), forKey: "deviceRules") }
     }
@@ -164,6 +166,7 @@ final class Settings: ObservableObject {
         trackDevices = d.bool(forKey: "trackDevices")
         updateCheck = d.bool(forKey: "updateCheck")
         updateAlert = d.bool(forKey: "updateAlert")
+        autoInstall = d.bool(forKey: "autoInstall")
         appTracking = AppTracking(rawValue: d.string(forKey: "appTracking") ?? "") ?? .normal
         livePowerTab = d.bool(forKey: "livePowerTab")
         deviceRules = (d.data(forKey: "deviceRules")).flatMap { try? JSONDecoder().decode([String: DeviceRule].self, from: $0) } ?? [:]

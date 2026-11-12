@@ -268,6 +268,7 @@ func tick() {
     var st = ChargeStatus(percent: shown, temperature: b.temperature)
     st.capabilities = (canInhibit && chieRole != .unknown || hasCHTE || hasCH0B ? ["charge-inhibit"] : [])
         + (canCutAdapter ? ["adapter"] : []) + (hasLED ? ["led"] : []) + (firmwareLimit ? ["firmware-limit"] : [])
+        + (UpdateKey.publicKey.isEmpty ? [] : ["app-update"])
 
     // Що хочемо: stop — не заряджати; drain — ще й вимкнути адаптер, щоб спуститись до ліміту
     var stop = false, drain = false
@@ -409,4 +410,23 @@ var configNotifyToken: Int32 = 0
 if notify_register_dispatch(ChargePaths.configChanged, &configNotifyToken, .main, { _ in checkConfig() }) != NOTIFY_STATUS_OK {
     log("can't listen for \(ChargePaths.configChanged)")
 }
+
+// Оновлення апки: запит пише не-root процес, тож UpdateInstall перевіряє все сам (підпис вкомпільованим ключем, sha256, бандл, версію, шлях).
+// Окрема черга: hdiutil і копіювання тривають секунди, а ліміт заряду має працювати й тоді.
+let updateQueue = DispatchQueue(label: "com.mansfera.lynxbattery.update")
+var updateBusy = false
+func checkUpdateRequest() {
+    guard !updateBusy, fm.fileExists(atPath: ChargePaths.dir + "/" + UpdateInstall.requestName) else { return }
+    updateBusy = true
+    updateQueue.async {
+        UpdateInstall.handleRequest(dir: ChargePaths.dir, workRoot: NSTemporaryDirectory(), publicKey: UpdateKey.publicKey,
+                                    allowedParent: UpdateInstall.helperAllowedParent, log: { s in log(s) })
+        DispatchQueue.main.async { updateBusy = false; checkUpdateRequest() }
+    }
+}
+var updateNotifyToken: Int32 = 0
+if notify_register_dispatch(ChargePaths.updateRequested, &updateNotifyToken, .main, { _ in checkUpdateRequest() }) != NOTIFY_STATUS_OK {
+    log("can't listen for \(ChargePaths.updateRequested)")
+}
+checkUpdateRequest()
 RunLoop.main.run()

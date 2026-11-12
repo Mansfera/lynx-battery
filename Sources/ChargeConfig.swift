@@ -21,6 +21,12 @@ enum ChargePaths {
     #else
     static let configChanged = "com.mansfera.lynxbattery.config-changed"
     #endif
+    /// Апка поклала запит на оновлення (UpdateInstall.requestName) — так само лише «перевір файл».
+    #if HELPER_TEST
+    static let updateRequested = "com.mansfera.lynxbattery.test.update-requested:" + dir
+    #else
+    static let updateRequested = "com.mansfera.lynxbattery.update-requested"
+    #endif
 
     // Хелпер зі старою назвою: установка нового зупиняє й прибирає його, щоб двоє не сперечались за заряд
     static let legacyDir = "/Library/Application Support/Etherlynx Battery"
