@@ -165,6 +165,30 @@ struct FirmwareHold {
     mutating func reset() { upper = nil }
 }
 
+/// Heat Protection: зупиняє заряд, щойно батарея досягла межі, і відпускає лише через 5 хв і після охолодження на `margin`.
+/// Відсоток, на якому зупинились (у розетці), лишається тим самим до кінця паузи: межа, що бігає за зарядом, щоразу перезаписувала б прошивку.
+struct HeatGuard {
+    static let hold: TimeInterval = 300
+    static let margin = 2.0
+
+    private(set) var since: Date?
+    private(set) var stopAt: Int?
+    var active: Bool { since != nil }
+
+    mutating func update(enabled: Bool, temperature: Double?, max: Double, macPercent: Int, plugged: Bool, now: Date = Date()) {
+        guard enabled else { since = nil; stopAt = nil; return }
+        // Пропущене читання датчика нічого не змінює
+        if let t = temperature {
+            if t >= max {
+                if since == nil { since = now }
+            } else if let s = since, t <= max - Self.margin, now.timeIntervalSince(s) >= Self.hold {
+                since = nil
+            }
+        }
+        stopAt = active && plugged ? stopAt ?? macPercent : nil
+    }
+}
+
 /// Коли можна вимикати адаптер для розряду: вимкнення зачіпає й те, що під'єднане тим самим кабелем.
 enum AdapterCut {
     /// Скільки часу без сну чекати після підключення: монітор піднімає зв'язок пізніше, ніж з'являється живлення.

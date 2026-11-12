@@ -143,7 +143,7 @@ var draining = false          // розряджаємо до межі; вмик�
 var hold = FirmwareHold()
 var wallSince: TimeInterval?   // відколи Mac живиться від розетки, а монітора не видно: його зв'язок піднімається не одразу, зокрема й після сну
 var cutBlockedLogged = false
-var heatSince: Date?
+var heat = HeatGuard()
 var sleepAssertion: IOPMAssertionID = 0
 var lastLowPowerRequest: Date?
 var tickTimer: Timer?
@@ -290,10 +290,9 @@ func tick() {
         }
     } else {
         // Heat Protection з витримкою 5 хв, як в AlDente
-        if cfg.heatProtection, let t = b.temperature {
-            if t >= cfg.heatMax, heatSince == nil { heatSince = Date() }
-            if let s = heatSince, t < cfg.heatMax - 1, Date().timeIntervalSince(s) > 300 { heatSince = nil }
-        } else { heatSince = nil }
+        // Адаптер, вимкнений нами, — це все ще розетка: інакше пауза через вимкнення адаптера сама себе скасовувала б
+        let plugged = b.onAC || (!adapterOn && !AdapterCut.chargerGone(BatteryReader.powerPorts()))
+        heat.update(enabled: cfg.heatProtection, temperature: b.temperature, max: cfg.heatMax, macPercent: b.macPercent, plugged: plugged)
 
         if toFull {
             holding = b.fullyCharged || b.percent >= 100
@@ -329,11 +328,11 @@ func tick() {
             if hold.upper == nil, scale != .macOS, let cur = firmwareTarget, abs(cur.upper - upper) <= 1, willDrain || cur.upper > b.macPercent { target = cur }
         } else { hold.reset() }
 
-        if heatSince != nil && b.onAC {
+        if let at = heat.stopAt {
             st.mode = .heat
             stop = true
-            // Спека: зупиняємо заряд на поточному рівні, адаптер і далі живить Mac
-            target = (max(10, b.macPercent - 20), b.macPercent)
+            // Спека: зупиняємо заряд на рівні, де спрацював захист, адаптер і далі живить Mac
+            target = (max(10, at - 20), at)
         } else if holding {
             stop = true
             if willDrain {

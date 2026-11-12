@@ -109,5 +109,32 @@ for domain in [fromDomain, toDomain] {
     try? FileManager.default.removeItem(at: file)
 }
 
+// LYN-14: 37° при межі 35° — заряд стоїть рівно, без перемикань щосекунди
+var heat = HeatGuard()
+let t0 = Date()
+func heatAt(_ temp: Double?, _ mac: Int, _ seconds: TimeInterval, plugged: Bool = true) -> Int? {
+    heat.update(enabled: true, temperature: temp, max: 35, macPercent: mac, plugged: plugged, now: t0.addingTimeInterval(seconds))
+    return heat.stopAt
+}
+check("heat: 34° doesn't trip", heatAt(34, 70, 0), nil)
+check("heat: 35° trips and stops at the current level", heatAt(35, 70, 1), 70)
+var flips = 0, last: Int? = 70
+for s in 2...240 {
+    let now = heatAt(s % 2 == 0 ? 37 : 36.5, 70 + s % 2, TimeInterval(s))
+    if now != last { flips += 1 }
+    last = now
+}
+check("heat: 37° for 4 minutes never lets charging back", flips, 0)
+check("heat: the stop level doesn't chase the percent", heat.stopAt, 70)
+check("heat: a missed sensor reading keeps the pause", heatAt(nil, 70, 250), 70)
+check("heat: cooled before 5 minutes still holds", heatAt(30, 70, 290), 70)
+check("heat: just under the limit after 5 minutes still holds", heatAt(34, 70, 400), 70)
+check("heat: cooled by the margin after 5 minutes resumes", heatAt(33, 70, 410), nil)
+check("heat: 34° after resuming doesn't trip again", heatAt(34, 71, 420), nil)
+check("heat: tripping on battery has nothing to stop", heatAt(36, 60, 500, plugged: false), nil)
+check("heat: plugging in while hot stops at the plug-in level", heatAt(36, 55, 510), 55)
+heat.update(enabled: false, temperature: 40, max: 35, macPercent: 55, plugged: true)
+check("heat: turning it off resumes", heat.stopAt, nil)
+
 print(failures == 0 ? "All passed" : "\(failures) failed")
 exit(failures == 0 ? 0 : 1)
