@@ -7,6 +7,10 @@ struct AlertSpec {
     var subtitle: String
     var symbol: String
     var tone: Tone
+    /// Кнопки-вибір праворуч від тексту; перша — основна.
+    var buttons: [String] = []
+    /// Хрестик праворуч: закрити, не виконуючи дію пігулки.
+    var closable = false
 
     var color: Color {
         switch tone {
@@ -125,11 +129,47 @@ final class AlertEngine {
                                      symbol: "exclamationmark.triangle.fill", tone: .low))
         } else if !b.chargerTooWeak { firedWeak = false }
     }
+
+    /// Нова версія: висить, доки не клацнуть (відкриває реліз) або не закриють (тоді пропонуємо вимкнути такі сповіщення).
+    func announceUpdate(_ r: ReleaseInfo) {
+        presenter.show(AlertSpec(title: "Lynx Battery \(r.version)", subtitle: "A new version is out · click to download",
+                                 symbol: "arrow.down", tone: .neutral, closable: true), sticky: true) { [weak self] hit in
+            switch hit {
+            case .body: NSWorkspace.shared.open(r.url)
+            case .close:
+                // Після того як пігулка відлетить
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self?.offerToMuteUpdates() }
+            case .button: break
+            }
+        }
+    }
+
+    private func offerToMuteUpdates() {
+        guard s.updateAlert else { return }
+        presenter.show(AlertSpec(title: "Stop update alerts?", subtitle: "New versions still show in the menu",
+                                 symbol: "bell.slash", tone: .neutral, buttons: ["Turn off", "Keep"]),
+                       hideAfter: 8, quiet: true) { [weak self] hit in
+            if hit == .button(0) { self?.s.updateAlert = false }
+        }
+    }
 }
+
+/// Куди клацнули на пігулці.
+enum PillHit: Equatable { case body, close, button(Int) }
 
 // MARK: - Показ
 
 final class AlertPresenter: NSObject {
+    /// Що показано: звичайна пігулка зникає сама, sticky — лише від кліку чи хрестика, хай що в «Keep alerts».
+    private struct Request {
+        var spec: AlertSpec
+        var sticky = false
+        var hideAfter: Double?
+        var onHit: ((PillHit) -> Void)?
+    }
+    private var current: Request?
+    /// Sticky-пігулка, яку на час затулила інша: повертається, щойно та зникне.
+    private var parked: Request?
     private var pill: NSPanel?
     private var glow: NSWindow?
     private var full: NSWindow?
@@ -143,11 +183,22 @@ final class AlertPresenter: NSObject {
 
     private var interacting = false
 
-    func show(_ spec: AlertSpec) {
-        playSound()
+    func show(_ spec: AlertSpec) { present(Request(spec: spec), quiet: false) }
+
+    /// sticky: не зникає сама. hideAfter: власна затримка для звичайної. onHit: клік по тілу, хрестику чи кнопці.
+    func show(_ spec: AlertSpec, sticky: Bool = false, hideAfter: Double? = nil, quiet: Bool = false, onHit: @escaping (PillHit) -> Void) {
+        present(Request(spec: spec, sticky: sticky, hideAfter: hideAfter, onHit: onHit), quiet: quiet)
+    }
+
+    private func present(_ req: Request, quiet: Bool) {
+        let spec = req.spec
+        if !quiet { playSound() }
         guard let screen = NSScreen.main else { return }
         hideWork?.cancel()
+        if req.sticky { parked = nil } else if let cur = current, cur.sticky, pill != nil { parked = cur }
         pill?.orderOut(nil)
+        current = req
+        interacting = false
 
         // Велике прозоре полотно: пігулка тягнеться за курсором і не обрізається.
         // Кліки крізь повністю прозорі пікселі macOS пропускає до вікон під ним.
@@ -169,22 +220,26 @@ final class AlertPresenter: NSObject {
         let view = JellyPill(spec: spec,
                              onInteract: { [weak self] on in
                                  self?.interacting = on
-                                 if !on { self?.scheduleHide(after: 1.6) }
+                                 if !on { self?.scheduleHide(after: max(1.6, (req.hideAfter ?? 3.2) / 2)) }
                              },
+                             onHit: { hit in req.onHit?(hit) },
                              onDismiss: { [weak self, weak panel] in
                                  guard let panel else { return }
-                                 if self?.pill === panel { self?.pill = nil }
                                  panel.orderOut(nil)
+                                 guard let self, self.pill === panel else { return }
+                                 self.pill = nil
+                                 self.current = nil
+                                 if let p = self.parked { self.parked = nil; self.present(p, quiet: true) }
                              })
         panel.contentView = FirstMouseHostingView(rootView: view.frame(width: size.width, height: size.height))
         panel.orderFrontRegardless()
         pill = panel
-        if Settings.shared.glow && !Settings.shared.minimalEnergy { flashGlow(spec.color, on: screen) }
-        if !Settings.shared.persistent { scheduleHide(after: 3.2) }
+        if !quiet && Settings.shared.glow && !Settings.shared.minimalEnergy { flashGlow(spec.color, on: screen) }
+        scheduleHide(after: req.hideAfter ?? 3.2)
     }
 
     private func scheduleHide(after seconds: Double) {
-        guard !Settings.shared.persistent else { return }
+        guard !Settings.shared.persistent, current?.sticky != true else { return }
         hideWork?.cancel()
         let work = DispatchWorkItem { [weak self] in
             guard let self, !self.interacting, let panel = self.pill else { return }
@@ -249,6 +304,7 @@ private final class FirstMouseHostingView<V: View>: NSHostingView<V> {
 /// Сама пігулка: глянцева чорна капсула, тонка обвідка й світіння кольором події.
 struct PillBody: View {
     let spec: AlertSpec
+    var onHit: (PillHit) -> Void = { _ in }
     var body: some View {
         HStack(spacing: 14) {
             ZStack {
@@ -267,8 +323,36 @@ struct PillBody: View {
                     .font(Brand.text(13))
                     .foregroundStyle(.white.opacity(0.6))
             }
+            if !spec.buttons.isEmpty {
+                HStack(spacing: 6) {
+                    ForEach(spec.buttons.indices, id: \.self) { i in
+                        Button { onHit(.button(i)) } label: {
+                            Text(spec.buttons[i])
+                                .font(Brand.text(12.5, .medium))
+                                .padding(.horizontal, 13).padding(.vertical, 7)
+                                .background(i == 0 ? Color.white : Color.white.opacity(0.14), in: Capsule())
+                                .foregroundStyle(i == 0 ? Brand.ink : .white)
+                                .contentShape(Capsule())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            if spec.closable {
+                Button { onHit(.close) } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(.white.opacity(0.75))
+                        .frame(width: 26, height: 26)
+                        .background(Color.white.opacity(0.14), in: Circle())
+                        .contentShape(Circle())
+                }
+                .buttonStyle(.plain)
+                .help("Close")
+                .accessibilityLabel("Close")
+            }
         }
-        .padding(.leading, 8).padding(.trailing, 30).padding(.vertical, 8)
+        .padding(.leading, 8).padding(.trailing, spec.closable || !spec.buttons.isEmpty ? 12 : 30).padding(.vertical, 8)
         .fixedSize()
         .background(Capsule().fill(Brand.ink))
         .overlay(Capsule().strokeBorder(spec.color.opacity(0.85), lineWidth: 1.5))
@@ -327,6 +411,7 @@ private struct EchoLayer: View {
 struct JellyPill: View {
     let spec: AlertSpec
     let onInteract: (Bool) -> Void
+    var onHit: (PillHit) -> Void = { _ in }
     let onDismiss: () -> Void
 
     @State private var offset: CGSize = CGSize(width: 0, height: -90)
@@ -347,7 +432,11 @@ struct JellyPill: View {
                 EchoLayer(index: i, size: pillSize, offset: offset, stretch: stretch, angle: angle, scale: scale, opacity: opacity)
             }
 
-            PillBody(spec: spec)
+            PillBody(spec: spec, onHit: { hit in
+                guard !leaving else { return }
+                onHit(hit)
+                leave(squash: true)
+            })
                 .background(GeometryReader { g in Color.clear.onAppear { pillSize = g.size } })
                 .modifier(Stretch(amount: stretch, angle: angle))
                 .scaleEffect(scale)
@@ -389,8 +478,12 @@ struct JellyPill: View {
                             let t = v.translation
                             let vel = v.predictedEndTranslation
                             if hypot(t.width, t.height) < 4 {
+                                guard !leaving else { return }
+                                onHit(.body)
                                 leave(squash: true)
                             } else if vel.height < -260 || hypot(vel.width, vel.height) > 900 {
+                                guard !leaving else { return }
+                                onHit(.close)   // відкинули — те саме, що закрили
                                 fling(vel)
                             } else {
                                 onInteract(false)

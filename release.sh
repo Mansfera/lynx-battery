@@ -7,7 +7,7 @@ cd "$(dirname "$0")"
 BUILD=$(( $(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" Info.plist) + 1 ))
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD" Info.plist
 
-env -u SIMULATE_NO_BATTERY ./build.sh
+env -u SIMULATE_NO_BATTERY -u SIMULATE_VERSION ./build.sh
 
 rm -rf build/dmg dist && mkdir -p build/dmg dist
 ditto "Lynx Battery.app" "build/dmg/Lynx Battery.app"

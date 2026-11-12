@@ -52,6 +52,14 @@ Don't need it? Turn off Track devices in Settings → Alerts. The Devices tab di
 ### Alerts
 A draggable pill with jelly physics, a screen-edge glow, and a full-screen alert at critical levels. Low and high thresholds are yours to set.
 
+### Updates
+Settings → Alerts → Updates has two switches, both on by default:
+
+- **Check for new versions:** asks GitHub for the latest release about 15 seconds after launch, then every 8 hours, and after waking if a check is due. A newer version shows as a banner at the top of the menu, with Download (opens the release page) and a close button that hides the banner until the next version. Drafts and pre-releases are skipped.
+- **Alert about new versions:** an alert pill, once per version. It stays until you click it, which opens the release page, or close it with × (or fling it away), whatever **Keep alerts until clicked** says. Closing it offers to turn these alerts off. If a battery or device alert comes in meanwhile, the update alert steps aside and comes back after.
+
+The request is anonymous: `GET api.github.com/repos/Mansfera/lynx-battery/releases/latest` with a `LynxBattery/<version>` User-Agent and nothing else about you or your Mac. The ETag is kept, so an unchanged answer doesn't count toward GitHub's rate limit, and checks happen at most once an hour even across restarts. Offline or rate-limited, it tries again later without saying anything.
+
 ### Percent modes
 - **As macOS shows:** the smoothed number from the battery controller.
 - **True charge:** remaining ÷ full.
@@ -105,11 +113,14 @@ Tests/right-click.sh    # right-click only toggles Low Power Mode without a pass
 Tests/desktop-mode.sh   # Macs without a battery, renders each screen to PNG
 Tests/power-breakdown.sh # the macOS row's power breakdown, renders it to PNG
 Tests/device-tracking.sh # Track devices off stops device reads and Bluetooth, on brings them back
+Tests/update-check.sh   # version comparison, GitHub release parsing, when the banner and alert show
 ```
 
 None of these touch the settings, history or charge limit of the installed app.
 
 To try the no-battery mode on a MacBook, `SIMULATE_NO_BATTERY=1 ./build.sh` builds the app as if it had no battery, and `SIMULATE_NO_BATTERY=no-watts` also hides the power keys. It's a compile flag, so normal builds don't contain it.
+
+To try the update banner and alert, `SIMULATE_VERSION=1.0.0 ./build.sh` builds an app that reports itself as 1.0.0. It only changes the built bundle's `Info.plist`, and `release.sh` unsets it. The alert shows once per version, so to see it again run `defaults delete com.mansfera.lynxbattery updateAlerted` (and `updateDismissed` for the banner, `updateCheckedAt` to check again right away) before relaunching.
 
 To publish a version, `./release.sh 1.0.1` builds the app, packages the DMG, creates the GitHub release and updates the cask in [Mansfera/homebrew-tap](https://github.com/Mansfera/homebrew-tap) from `Homebrew/lynx-battery.rb`.
 

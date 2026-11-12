@@ -42,6 +42,7 @@ final class AppModel: ObservableObject {
 
     let history = HistoryStore()
     let alerts = AlertEngine()
+    let updates = UpdateChecker()
     var onChange: (() -> Void)?
     private var timer: Timer?
     private var deviceTimer: Timer?
@@ -65,6 +66,8 @@ final class AppModel: ObservableObject {
         energyMode = Settings.shared.$minimalEnergy.dropFirst().receive(on: DispatchQueue.main).sink { [weak self] _ in self?.applyEnergyMode() }
         deviceTracking = Settings.shared.$trackDevices.dropFirst().removeDuplicates().receive(on: DispatchQueue.main).sink { [weak self] _ in self?.applyDeviceTracking() }
         applyEnergyMode()
+        updates.onRelease = { [weak self] r in self?.alerts.announceUpdate(r) }
+        updates.start()
     }
 
     /// Запускає або зупиняє все фонове під перемикач «Minimal energy use».

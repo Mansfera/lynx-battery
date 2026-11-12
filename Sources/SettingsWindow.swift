@@ -220,7 +220,7 @@ struct AlertSettings: View {
 
     var body: some View {
         let hasBattery = model.battery != nil
-        SettingsPane(height: hasBattery ? 772 : 392) {
+        SettingsPane(height: hasBattery ? 1000 : 582) {
             if hasBattery {
                 Section {
                     VStack(alignment: .leading, spacing: 8) {
@@ -269,6 +269,17 @@ struct AlertSettings: View {
                 .disabled(s.minimalEnergy)
                 Toggle("Keep alerts until clicked", isOn: $s.persistent)
             } header: { SectionHead("Style") }
+            Section {
+                Toggle(isOn: $s.updateCheck) {
+                    Text("Check for new versions")
+                    Text("Asks GitHub a few times a day. A new version shows as a banner in the menu.")
+                }
+                Toggle(isOn: Binding(get: { s.updateCheck && s.updateAlert }, set: { s.updateAlert = $0 })) {
+                    Text("Alert about new versions")
+                    Text("Once per version. Stays until you click or close it, even with Keep alerts off.")
+                }
+                .disabled(!s.updateCheck)
+            } header: { SectionHead("Updates") }
         }
     }
 }
