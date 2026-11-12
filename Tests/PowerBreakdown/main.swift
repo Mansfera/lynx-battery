@@ -99,7 +99,23 @@ check("holding on the adapter: all of it goes to the Mac", near(resting.total, 9
 let topUp = flowSnap(ac: true, charging: false, watts: -6, system: 30, input: 24)
 check("adapter plus battery feed the Mac together", near(topUp.adapterToMac, 24) && near(topUp.batteryToMac, 6) && near(topUp.total, 30))
 let unplugged = flowSnap(ac: false, charging: false, watts: -8, system: 7.5, input: 0)
-check("on battery: the Mac lives on the battery alone", near(unplugged.total, 8) && unplugged.adapterToMac == 0)
+check("on battery: the band is the Mac's draw, not the minute-old current", near(unplugged.total, 7.5) && unplugged.adapterToMac == 0)
+let justUnplugged = flowSnap(ac: false, charging: false, watts: 3, system: 0, input: 0)
+check("on battery with no draw known and a stale charge: no negative band", justUnplugged.batteryToMac == 0)
+let noLoad = flowSnap(ac: false, charging: false, watts: -8, system: 0, input: 0)
+check("on battery with no draw known: falls back to the battery current", near(noLoad.total, 8))
+func snap(ac: Bool, watts: Double, system: Double, input: Double) -> BatterySnapshot {
+    BatterySnapshot(percent: 60, isCharging: watts > 0, onAC: ac, fullyCharged: false, minutes: nil, watts: watts,
+                    adapterWatts: ac ? 35 : nil, cycles: 0, designCycles: 1000, designCapacity: 1000, fullCapacity: 1000,
+                    temperature: nil, systemWatts: system, inputWatts: input, lowPower: false)
+}
+let onBattery = snap(ac: false, watts: -4.52, system: 4.4, input: 0)
+check("on battery: the flow shows the same draw as the breakdown below it", near(onBattery.drawing(4.7).flow.total, 4.7))
+check("on battery with the breakdown closed: the flow keeps its own draw", near(onBattery.drawing(nil).flow.total, 4.4))
+let plugged = snap(ac: true, watts: 22.15, system: 10.55, input: 32.7)
+check("on the adapter: the breakdown doesn't replace the input", plugged.drawing(9.8) == plugged)
+let split = PowerFlow(toBattery: 22.15, adapterToMac: 10.55, batteryToMac: 0)
+check("total is the sum of the band labels", near(split.shownTotal, 22.2 + 10.6))
 
 // Живе читання: без root і на справжньому чипі
 let monitor = PowerBreakdownMonitor()

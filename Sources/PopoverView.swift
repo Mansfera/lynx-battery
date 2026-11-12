@@ -743,7 +743,7 @@ struct PowerTab: View {
 
     var body: some View {
         VStack(spacing: 10) {
-            if let b { PowerFlowStage(b: b, animating: model.popoverShown && !s.minimalEnergy, holdingOnWall: b.onAC && model.charge.holdingOnWall) } else { MacPowerStage(model: model) }
+            if let b { PowerFlowStage(b: b.drawing(model.breakdown?.total), animating: model.popoverShown && !s.minimalEnergy, holdingOnWall: b.onAC && model.charge.holdingOnWall) } else { MacPowerStage(model: model) }
             Panel {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack {
@@ -996,7 +996,7 @@ struct PowerFlowStage: View {
                 HStack {
                     Text("Power flow").font(Brand.text(11, .medium)).foregroundStyle(pal.fg.opacity(0.6))
                     Spacer()
-                    Text(String(format: "%.1f W total", flow.total))
+                    Text(String(format: "%.1f W total", flow.shownTotal))
                         .font(Brand.text(11)).foregroundStyle(pal.fg.opacity(0.6))
                 }
                 Sankey(adapterToBattery: flow.toBattery,
@@ -1040,7 +1040,8 @@ struct Sankey: View, Animatable {
         set { adapterToBattery = newValue.first; adapterToMac = newValue.second.first; batteryToMac = newValue.second.second }
     }
 
-    private struct Flow { let from: Int; let to: Int; let w: Double }   // from: 0 адаптер, 1 батарея; to: 0 батарея, 1 Mac
+    // from: 0 адаптер, 1 батарея; to: 0 батарея, 1 Mac. Тонка стрічка лишається видимою, але підписана справжніми ватами.
+    private struct Flow { let from: Int; let to: Int; let watts: Double; var w: Double { max(watts, 0.05) } }
 
     var body: some View {
         // Закритий поповер лише ховає вікно: без paused хвиля крутила б 30 кадрів/с вічно, коштом батареї.
@@ -1057,11 +1058,11 @@ struct Sankey: View, Animatable {
     private var flows: [Flow] {
         var f: [Flow] = []
         if onAC {
-            if adapterToBattery > 0.05 { f.append(Flow(from: 0, to: 0, w: adapterToBattery)) }
-            f.append(Flow(from: 0, to: 1, w: max(adapterToMac, 0.05)))
-            if batteryToMac > 0.05 { f.append(Flow(from: 1, to: 1, w: batteryToMac)) }
+            if adapterToBattery > 0.05 { f.append(Flow(from: 0, to: 0, watts: adapterToBattery)) }
+            f.append(Flow(from: 0, to: 1, watts: max(adapterToMac, 0)))
+            if batteryToMac > 0.05 { f.append(Flow(from: 1, to: 1, watts: batteryToMac)) }
         } else {
-            f.append(Flow(from: 1, to: 1, w: max(batteryToMac, 0.05)))
+            f.append(Flow(from: 1, to: 1, watts: max(batteryToMac, 0)))
         }
         return f
     }
@@ -1154,7 +1155,7 @@ struct Sankey: View, Animatable {
             ZStack(alignment: .topLeading) {
                 ForEach(Array(L.bands.enumerated()), id: \.offset) { _, item in
                     let (f, s, e) = item
-                    Text(String(format: "%.2f W", f.w))
+                    Text(String(format: "%.1f W", f.watts))
                         .font(Brand.text(13, .semibold)).monospacedDigit()
                         .position(x: (s.minX + e.minX) / 2, y: (s.midY + e.midY) / 2)
                         .opacity(s.height >= 22 ? 1 : 0)

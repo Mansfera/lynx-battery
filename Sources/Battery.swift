@@ -39,11 +39,19 @@ struct BatterySnapshot: Equatable {
     /// Куди йде живлення. На адаптері все рахуємо від входу: Mac отримує те, що лишилося після батареї
     /// (разом із втратами зарядки всередині Mac), тож потоки завжди дорівнюють входу, а не трьом окремим замірам.
     var flow: PowerFlow {
-        // Без адаптера Mac живе лише від батареї, навіть якщо струм ще не оновився (буває до хвилини)
-        guard onAC else { return PowerFlow(toBattery: 0, adapterToMac: 0, batteryToMac: max(-watts, systemWatts)) }
+        // Без адаптера Mac живе лише від батареї, навіть якщо струм ще не оновився (буває до хвилини): тоді рахує споживання Mac
+        guard onAC else { return PowerFlow(toBattery: 0, adapterToMac: 0, batteryToMac: systemWatts > 0 ? systemWatts : max(0, -watts)) }
         let toBattery = isCharging ? max(0, watts) : 0
         let input = max(inputWatts, toBattery)
         return PowerFlow(toBattery: toBattery, adapterToMac: input - toBattery, batteryToMac: max(0, -watts))
+    }
+
+    /// На батареї потік показує те саме споживання, що й розбивка під ним, коли вона відкрита: обидва з PSTR, але з різним усередненням
+    func drawing(_ macWatts: Double?) -> BatterySnapshot {
+        guard !onAC, let macWatts else { return self }
+        var b = self
+        b.systemWatts = macWatts
+        return b
     }
 
     var needsService: Bool { health > 0 && (health < 80 || cycles >= designCycles) }
@@ -90,6 +98,8 @@ struct PowerFlow: Equatable {
     var adapterToMac: Double
     var batteryToMac: Double
     var total: Double { toBattery + adapterToMac + batteryToMac }
+    /// Сума тих чисел, що на стрічках: підписи й «W total» не розходяться через округлення
+    var shownTotal: Double { [toBattery, adapterToMac, batteryToMac].reduce(0) { $0 + ($1 * 10).rounded() / 10 } }
 }
 
 /// Які високі пороги вже спрацювали: кожен сповіщає один раз, поки заряд не впаде нижче нього.

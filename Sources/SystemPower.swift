@@ -12,6 +12,12 @@ enum SystemPower {
         b.watts = 0
     }
 
+    /// На батареї SystemLoad і струм оновлюються раз на хвилину, а PSTR живий — той самий, що в розбивці «Whole Mac right now».
+    static func liveDraw(_ b: inout BatterySnapshot) {
+        guard !b.onAC, let load = SMC.shared.read("PSTR"), plausible(load) else { return }
+        b.systemWatts = load
+    }
+
     /// IOPS — те саме джерело, що й у pmset. Служба AppleSmartBattery сама по собі нічого не доводить:
     /// на Mac без батареї вона може існувати. NULL — це помилка, а не «батареї нема», тоді вирішує BatteryReader.
     static func hasInternalBattery() -> Bool {
