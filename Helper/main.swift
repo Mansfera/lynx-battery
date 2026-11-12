@@ -1,5 +1,6 @@
 import Foundation
 import IOKit.pwr_mgt
+import notify
 
 // Root-хелпер Lynx Battery. Тримає ліміт заряду, Sailing, Heat Protection, Top Up, LED MagSafe.
 //
@@ -396,5 +397,11 @@ let configWatcher = FolderWatcher(path: ChargePaths.dir, onChange: checkConfig)
 if configWatcher == nil {
     log("can't watch \(ChargePaths.dir), checking the config every 2 s")
     Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { _ in checkConfig() }
+}
+// Апка ще й будить нас сповіщенням після кожного запису — не залежить від того, чи тека віддала подію.
+// Повтори дешеві: tick лише тоді, коли файл справді змінився.
+var configNotifyToken: Int32 = 0
+if notify_register_dispatch(ChargePaths.configChanged, &configNotifyToken, .main, { _ in checkConfig() }) != NOTIFY_STATUS_OK {
+    log("can't listen for \(ChargePaths.configChanged)")
 }
 RunLoop.main.run()

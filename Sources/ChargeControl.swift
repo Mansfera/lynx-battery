@@ -1,4 +1,5 @@
 import Foundation
+import notify
 
 /// Апка пише налаштування ліміту, root-хелпер їх виконує й звітує стан.
 final class ChargeControl: ObservableObject {
@@ -10,6 +11,7 @@ final class ChargeControl: ObservableObject {
     @Published var error: String?
 
     private var saveWork: DispatchWorkItem?
+    private var statusFollowUp: DispatchWorkItem?
     private var loadingFromFile = false
     private var previewing = false
     private var timer: Timer?
@@ -107,7 +109,14 @@ final class ChargeControl: ObservableObject {
     private func write() {
         guard !previewing, let d = try? JSONEncoder().encode(config.sanitized()) else { return }
         do { try d.write(to: URL(fileURLWithPath: ChargePaths.config), options: .atomic) }
-        catch { self.error = "Couldn't save the charge settings: \(error.localizedDescription)" }
+        catch { self.error = "Couldn't save the charge settings: \(error.localizedDescription)"; return }
+        // Будимо хелпер, щоб новий ліміт діяв одразу, а не за наступним tick. Старіший хелпер сповіщення не чекає, йому вистачає теки.
+        notify_post(ChargePaths.configChanged)
+        // Хелпер відповідає за мить: читаємо його стан, не чекаючи таймера (5 с у поповері, 45 с у фоні)
+        statusFollowUp?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.statusFollowUp = nil; self?.readStatus() }
+        statusFollowUp = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1, execute: work)
     }
 
     /// Для прев'ю й тестів: підставити стан без хелпера.

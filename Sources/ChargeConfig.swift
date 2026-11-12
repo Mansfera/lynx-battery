@@ -14,6 +14,13 @@ enum ChargePaths {
     static let helperBinary = "/Library/PrivilegedHelperTools/com.mansfera.lynxbattery.helper"
     static let daemonPlist = "/Library/LaunchDaemons/com.mansfera.lynxbattery.helper.plist"
     static let log = "/var/log/lynx-battery-helper.log"
+    /// Сповіщення Darwin, яке апка шле після запису налаштувань: хелпер перечитує файл одразу.
+    /// Це лише «перевір файл» — саме налаштування хелпер бере тільки з файлу, тож чужий виклик нічого не змінить.
+    #if HELPER_TEST
+    static let configChanged = "com.mansfera.lynxbattery.test.config-changed:" + dir
+    #else
+    static let configChanged = "com.mansfera.lynxbattery.config-changed"
+    #endif
 
     // Хелпер зі старою назвою: установка нового зупиняє й прибирає його, щоб двоє не сперечались за заряд
     static let legacyDir = "/Library/Application Support/Etherlynx Battery"

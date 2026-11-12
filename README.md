@@ -72,6 +72,8 @@ The limit runs in a small root LaunchDaemon, installed from the Charge tab with 
 
 The helper picks a lever per firmware: `CHTE` or `CH0B`+`CH0C` to pause charging, and `CH0I` to cut the adapter. `CHIE` behaves differently across firmware, so its role is self-tested on first use. macOS can reset these keys, so the helper re-checks them every 3 seconds while something is paused. On exit, when the limit is off, or at 10% or below, it restores normal charging. That's why the lowest limit is 15%.
 
+A new limit or setting applies within a second. The app saves it and then pings the helper, which also watches its settings folder. It still re-checks everything every 15 seconds, or every 40 in Minimal energy use.
+
 | What | Where |
 |---|---|
 | Bundle ID | `com.mansfera.lynxbattery` |

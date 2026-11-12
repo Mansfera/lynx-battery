@@ -51,6 +51,15 @@ write_config '{"enabled":false,"limit":80,"sailing":true,"sailRange":5,"heatProt
 sleep 1
 check "a config change wakes the helper within a second" "$( (($(stamp) > B)) && echo 1)"
 
+# Апка після запису ще й шле сповіщення: воно будить хелпер навіть без події теки. Запис на місці теку не змінює
+sleep 2; B=$(stamp); sleep 1.2
+printf '%s' '{"enabled":false,"limit":75,"sailing":true,"sailRange":5,"heatProtection":true,"heatMax":35,"sleepUntilLimit":false,"magsafeLED":false,"discharge":true,"topUp":false,"lowPower":false,"minimalEnergy":true}' > "$DIR/charge-config.json"
+sleep 1
+check "an in-place write alone waits for the next tick" "$( (($(stamp) == B)) && echo 1)"
+notifyutil -p "com.mansfera.lynxbattery.test.config-changed:$DIR"
+sleep 1
+check "the app's notification wakes the helper within a second" "$( (($(stamp) > B)) && echo 1)"
+
 GAP=$(longest_gap 95)
 echo "      minimal: longest gap ${GAP}s"
 check "minimal pace: slower than normal" "$( ((GAP >= 30)) && echo 1)"
