@@ -47,6 +47,8 @@ Minimal energy use cuts the app's own draw. It stops energy sampling, animations
 ### Devices
 AirPods (left, right and case, even before they connect), Magic Mouse, Keyboard and Trackpad, a paired iPhone or iPad nearby, and anything connected that exposes the Bluetooth Battery Service. macOS asks for Bluetooth access the first time you open this tab; until you allow it, iPhone, iPad and other devices read over the Battery Service don't show up or send alerts.
 
+Don't need it? Turn off Track devices in Settings → Alerts. The Devices tab disappears and the app stops reading devices altogether: no Bluetooth scans or connections, no `system_profiler` or `ioreg` reads, no device alerts, and no device in the menu bar of a Mac without a battery. It doesn't ask for Bluetooth access while it's off. Turning it back on picks up again right away, no relaunch needed.
+
 ### Alerts
 A draggable pill with jelly physics, a screen-edge glow, and a full-screen alert at critical levels. Low and high thresholds are yours to set.
 
@@ -102,6 +104,7 @@ Tests/helper-restore.sh # the cask puts the helper back after an upgrade
 Tests/right-click.sh    # right-click only toggles Low Power Mode without a password prompt
 Tests/desktop-mode.sh   # Macs without a battery, renders each screen to PNG
 Tests/power-breakdown.sh # the macOS row's power breakdown, renders it to PNG
+Tests/device-tracking.sh # Track devices off stops device reads and Bluetooth, on brings them back
 ```
 
 None of these touch the settings, history or charge limit of the installed app.

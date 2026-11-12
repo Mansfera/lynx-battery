@@ -220,7 +220,7 @@ struct AlertSettings: View {
 
     var body: some View {
         let hasBattery = model.battery != nil
-        SettingsPane(height: hasBattery ? 720 : 340) {
+        SettingsPane(height: hasBattery ? 772 : 392) {
             if hasBattery {
                 Section {
                     VStack(alignment: .leading, spacing: 8) {
@@ -244,6 +244,10 @@ struct AlertSettings: View {
                 } header: { SectionHead("Battery") }
             }
             Section {
+                Toggle(isOn: $s.trackDevices) {
+                    Text("Track devices")
+                    Text("Off hides the Devices tab and stops reading AirPods, mice, keyboards and phones, Bluetooth included.")
+                }
                 Picker(selection: $s.deviceLowAt) {
                     Text("Off").tag(0)
                     ForEach([5, 10, 15, 20, 30], id: \.self) { Text("\($0)%").tag($0) }
@@ -251,6 +255,7 @@ struct AlertSettings: View {
                     Text("Low battery alert")
                     Text("For devices you haven't set up one by one. To change one device, click its row in Devices.")
                 }
+                .disabled(!s.trackDevices)
             } header: { SectionHead("Devices") }
             Section {
                 Picker("Sound", selection: $s.sound) {

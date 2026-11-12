@@ -12,7 +12,18 @@ final class AppModel: ObservableObject {
     @Published private(set) var historyTick = 0
 
     enum Tab: String, CaseIterable, Identifiable { case overview = "Overview", charge = "Charge", power = "Power", devices = "Devices"; var id: String { rawValue } }
-    @Published var tab: Tab = .overview { didSet { startBluetoothOnDevicesTab() } }
+    @Published var tab: Tab = .overview {
+        didSet {
+            if tab == .devices, !Settings.shared.trackDevices { tab = firstTab }
+            startBluetoothOnDevicesTab()
+        }
+    }
+    /// Вкладки, які показує верхня панель.
+    var tabs: [Tab] {
+        let all: [Tab] = battery == nil ? [.power, .devices] : Tab.allCases
+        return Settings.shared.trackDevices ? all : all.filter { $0 != .devices }
+    }
+    private var firstTab: Tab { battery == nil ? .power : .overview }
     @Published var apps: [AppEnergy] = []
     @Published var expandedApp: String?
     /// Куди йде потужність усього Mac; міряємо лише поки цю розбивку видно.
@@ -37,6 +48,7 @@ final class AppModel: ObservableObject {
     private var percentMode: AnyCancellable?
     private var chargeStatus: AnyCancellable?
     private var energyMode: AnyCancellable?
+    private var deviceTracking: AnyCancellable?
     private let deviceQueue = DispatchQueue(label: "sik.devices", qos: .utility)
 
     func start() {
@@ -51,27 +63,21 @@ final class AppModel: ObservableObject {
         chargeStatus = charge.$status.map { $0?.wallHold }.removeDuplicates().receive(on: DispatchQueue.main).sink { [weak self] _ in self?.onChange?() }
         ble.onChange = { [weak self] in self?.mergeDevices() }
         energyMode = Settings.shared.$minimalEnergy.dropFirst().receive(on: DispatchQueue.main).sink { [weak self] _ in self?.applyEnergyMode() }
+        deviceTracking = Settings.shared.$trackDevices.dropFirst().removeDuplicates().receive(on: DispatchQueue.main).sink { [weak self] _ in self?.applyDeviceTracking() }
         applyEnergyMode()
     }
 
     /// Запускає або зупиняє все фонове під перемикач «Minimal energy use».
     private func applyEnergyMode() {
         let minimal = Settings.shared.minimalEnergy
-        deviceTimer?.invalidate(); deviceTimer = nil
         energyTimer?.invalidate(); energyTimer = nil
         charge.minimalEnergy = minimal
         charge.setVisible(popoverShown)
+        applyDeviceTracking()
         if minimal {
-            // Пристрої читаємо лише при відкритті поповера; старих чисел під виглядом живих не лишаємо
-            ble.stop()
             apps = []
             wattHistory = []
         } else {
-            // Дозвіл уже є — читаємо й у фоні. Ще немає — про нього спитає вкладка Devices, а не запуск апки
-            if ble.authorized || devicesOnScreen { ble.start() }
-            refreshDevices()
-            deviceTimer = Timer.scheduledTimer(withTimeInterval: 90, repeats: true) { [weak self] _ in self?.refreshDevices() }
-            deviceTimer?.tolerance = 15
             // Енергію по апках пишемо раз на 2 хв у фоні; поки поповер відкритий — частіше.
             sampleEnergy()
             energyTimer = Timer.scheduledTimer(withTimeInterval: 120, repeats: true) { [weak self] _ in self?.sampleEnergy() }
@@ -80,10 +86,32 @@ final class AppModel: ObservableObject {
         scheduleSampling()
     }
 
+    /// Запускає або зупиняє опитування пристроїв під «Track devices» і «Minimal energy use».
+    private func applyDeviceTracking() {
+        deviceTimer?.invalidate(); deviceTimer = nil
+        guard Settings.shared.trackDevices else {
+            ble.stop()
+            classicDevices = []
+            if tab == .devices { tab = firstTab }
+            if !devices.isEmpty { devices = []; onChange?() }
+            return
+        }
+        if Settings.shared.minimalEnergy {
+            // Пристрої читаємо лише при відкритті поповера; старих чисел під виглядом живих не лишаємо
+            ble.stop()
+            return
+        }
+        // Дозвіл уже є — читаємо й у фоні. Ще немає — про нього спитає вкладка Devices, а не запуск апки
+        if ble.authorized || devicesOnScreen { ble.start() }
+        refreshDevices()
+        deviceTimer = Timer.scheduledTimer(withTimeInterval: 90, repeats: true) { [weak self] _ in self?.refreshDevices() }
+        deviceTimer?.tolerance = 15
+    }
+
     private var devicesOnScreen: Bool { popoverShown && tab == .devices }
 
     private func startBluetoothOnDevicesTab() {
-        if devicesOnScreen, !Settings.shared.minimalEnergy { ble.start() }
+        if devicesOnScreen, Settings.shared.trackDevices, !Settings.shared.minimalEnergy { ble.start() }
     }
 
     /// Мінімальний режим пригальмовує лише фон: відкритий поповер показує свіжі числа, бо на них дивляться.
@@ -209,9 +237,12 @@ final class AppModel: ObservableObject {
     }
 
     func refreshDevices() {
+        guard Settings.shared.trackDevices else { return }
         deviceQueue.async { [weak self] in
             let (list, paired) = DeviceReader.read()
             DispatchQueue.main.async {
+                // Вимкнули, поки читали
+                guard Settings.shared.trackDevices else { return }
                 self?.classicDevices = list
                 // Те, що вже звітує заряд (AirPods), через BLE не чіпаємо
                 self?.ble.paired = paired.filter { name, _ in !list.contains { $0.name == name && $0.lowest != nil } }
@@ -223,6 +254,7 @@ final class AppModel: ObservableObject {
 
     /// Класичний Bluetooth (system_profiler) + BLE Battery Service; дублікати за назвою зливаємо.
     private func mergeDevices() {
+        guard Settings.shared.trackDevices else { return }
         var list = classicDevices
         for d in ble.devices { DeviceReader.absorb(d, into: &list) }
         list.sort { ($0.lowest ?? 101) < ($1.lowest ?? 101) }

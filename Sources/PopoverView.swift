@@ -99,11 +99,12 @@ struct MainPage: View {
 
 struct TopBar: View {
     @ObservedObject var model: AppModel
+    @ObservedObject var s = Settings.shared
     @Environment(\.palette) private var pal
     var body: some View {
         HStack(spacing: 2) {
             // Без батареї лишаються потужність і пристрої
-            ForEach(model.battery == nil ? [AppModel.Tab.power, .devices] : AppModel.Tab.allCases) { t in
+            ForEach(model.tabs) { t in
                 let on = model.tab == t
                 Button { model.tab = t; if t == .power { model.sampleEnergy() } } label: {
                     Text(t.rawValue)

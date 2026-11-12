@@ -77,6 +77,8 @@ final class Settings: ObservableObject {
     @Published var rightClickLowPower: Bool { didSet { d.set(rightClickLowPower, forKey: "rightClickLowPower") } }
     /// Мінімум енергії: без замірів по апках, анімацій і Bluetooth, решта читається рідше. Ліміт заряду й сповіщення лишаються.
     @Published var minimalEnergy: Bool { didSet { d.set(minimalEnergy, forKey: "minimalEnergy") } }
+    /// Вимкнено — ні вкладки Devices, ні опитування пристроїв, ні Bluetooth, ні їхніх сповіщень.
+    @Published var trackDevices: Bool { didSet { d.set(trackDevices, forKey: "trackDevices") } }
     @Published var deviceRules: [String: DeviceRule] {
         didSet { d.set(try? JSONEncoder().encode(deviceRules), forKey: "deviceRules") }
     }
@@ -106,7 +108,7 @@ final class Settings: ObservableObject {
             "low": [20, 10, 5], "high": [80], "plug": true, "unplug": true,
             "fullscreen": 3, "deviceLow": 15, "glow": true, "sound": "Glass",
             "icon": IconStyle.inside.rawValue, "colors": true,
-            "animate": true, "persistent": false, "heat": true,
+            "animate": true, "persistent": false, "heat": true, "trackDevices": true,
         ])
         lowAlerts = Set(d.array(forKey: "low") as? [Int] ?? [])
         highAlerts = Set(d.array(forKey: "high") as? [Int] ?? [])
@@ -126,6 +128,7 @@ final class Settings: ObservableObject {
         heatAlert = d.bool(forKey: "heat")
         rightClickLowPower = d.bool(forKey: "rightClickLowPower")
         minimalEnergy = d.bool(forKey: "minimalEnergy")
+        trackDevices = d.bool(forKey: "trackDevices")
         deviceRules = (d.data(forKey: "deviceRules")).flatMap { try? JSONDecoder().decode([String: DeviceRule].self, from: $0) } ?? [:]
     }
 }
