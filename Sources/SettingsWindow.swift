@@ -64,6 +64,8 @@ final class SettingsWindow: NSObject, NSWindowDelegate {
         tabs.tabStyle = .toolbar
         tabs.addTabViewItem(tab("General", symbol: "gearshape", GeneralSettings(model: model)))
         tabs.addTabViewItem(tab("Alerts", symbol: "bell", AlertSettings(model: model)))
+        tabs.addTabViewItem(tab("Sounds", symbol: "speaker.wave.2", SoundSettings(model: model)))
+        tabs.addTabViewItem(tab("Updates", symbol: "arrow.down.circle", UpdateSettings(model: model)))
         tabs.addTabViewItem(tab("About", symbol: "info.circle", AboutSettings(model: model)))
         let w = NSWindow(contentViewController: tabs)
         w.styleMask = [.titled, .closable]
@@ -236,7 +238,7 @@ struct AlertSettings: View {
 
     var body: some View {
         let hasBattery = model.battery != nil
-        SettingsPane(height: hasBattery ? 1070 : 652) {
+        SettingsPane(height: hasBattery ? 760 : 380) {
             if hasBattery {
                 Section {
                     VStack(alignment: .leading, spacing: 8) {
@@ -274,10 +276,6 @@ struct AlertSettings: View {
                 .disabled(!s.trackDevices)
             } header: { SectionHead("Devices") }
             Section {
-                Picker("Sound", selection: $s.sound) {
-                    ForEach(Settings.sounds, id: \.self) { Text($0).tag($0) }
-                }
-                .onChange(of: s.sound) { _, v in NSSound(named: NSSound.Name(v))?.play() }
                 Toggle(isOn: $s.glow) {
                     Text("Screen glow")
                     Text(s.minimalEnergy ? "Off while Minimal energy use is on." : "Flashes the screen edges in the alert's colour.")
@@ -285,6 +283,48 @@ struct AlertSettings: View {
                 .disabled(s.minimalEnergy)
                 Toggle("Keep alerts until clicked", isOn: $s.persistent)
             } header: { SectionHead("Style") }
+        }
+    }
+}
+
+struct SoundSettings: View {
+    @ObservedObject var model: AppModel
+    @ObservedObject var s = Settings.shared
+
+    private func pickers(_ kinds: [AlertSound], off: Bool = false) -> some View {
+        ForEach(kinds) { SoundPicker(kind: $0, presenter: model.alerts.presenter).disabled(!s.soundsOn || off) }
+    }
+
+    var body: some View {
+        let hasBattery = model.battery != nil
+        SettingsPane(height: hasBattery ? 760 : 440) {
+            Section {
+                Toggle(isOn: $s.soundsOn) {
+                    Text("Play sounds")
+                    Text("Each alert has its own sound, so you can tell them apart without looking. Picking one plays it; Option-click an alert's name, or Option-pick a sound, to also see a test alert.")
+                }
+                Button("Restore default sounds") { s.alertSounds = [:] }
+                    .disabled(s.alertSounds.isEmpty)
+            }
+            if hasBattery {
+                Section { pickers([.plug, .charged, .unplug, .low, .critical, .warning]) } header: { SectionHead("Battery") }
+            }
+            Section {
+                pickers([.deviceLow, .deviceFull], off: !s.trackDevices)
+            } header: { SectionHead("Devices") } footer: {
+                if !s.trackDevices { Text("Track devices is off in Alerts.").font(Brand.text(11)).foregroundStyle(.secondary) }
+            }
+            Section { pickers([.lowPower, .update]) } header: { SectionHead("Other") }
+        }
+    }
+}
+
+struct UpdateSettings: View {
+    @ObservedObject var model: AppModel
+    @ObservedObject var s = Settings.shared
+
+    var body: some View {
+        SettingsPane(height: 300) {
             Section {
                 Toggle(isOn: $s.updateCheck) {
                     Text("Check for new versions")
@@ -304,8 +344,41 @@ struct AlertSettings: View {
                          : "Checks the release's signature, replaces the app and relaunches it. With the charge-limit helper, no password.")
                 }
                 .disabled(!s.updateCheck || !canAuto)
-            } header: { SectionHead("Updates") }
+            } header: { SectionHead("New versions") }
         }
+    }
+}
+
+/// One alert's sound. Picking one plays it, so you hear what you chose.
+/// With Option held, a click on the name or a pick from the menu also shows a test alert of that kind, which plays the sound itself.
+private struct SoundPicker: View {
+    let kind: AlertSound
+    let presenter: AlertPresenter
+    @ObservedObject var s = Settings.shared
+
+    private func preview() { presenter.show(AlertSpec.sample(kind)) }
+
+    var body: some View {
+        Picker(selection: Binding(get: { s.sound(for: kind) }, set: { v in
+            s.setSound(v, for: kind)
+            if NSEvent.modifierFlags.contains(.option) { preview() } else { NSSound(named: NSSound.Name(v))?.play() }
+        })) {
+            Text(Settings.noSound).tag(Settings.noSound)
+            Divider()
+            ForEach(Settings.sounds, id: \.self) { name in
+                Text(name).tag(name)
+            }
+        } label: {
+            Text(kind.title).onOptionClick(preview)
+            if let detail = kind.detail { Text(detail).onOptionClick(preview) }
+        }
+        .help("Option-click to try this alert")
+    }
+}
+
+private extension View {
+    func onOptionClick(_ action: @escaping () -> Void) -> some View {
+        contentShape(Rectangle()).onTapGesture { if NSEvent.modifierFlags.contains(.option) { action() } }
     }
 }
 

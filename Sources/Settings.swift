@@ -60,6 +60,46 @@ enum AppTracking: String, CaseIterable, Identifiable {
     }
 }
 
+/// Which sound an alert plays. Each kind has its own setting, so the event can be told apart without looking.
+enum AlertSound: String, CaseIterable, Identifiable {
+    case plug, charged, unplug, low, critical, warning, deviceLow, deviceFull, lowPower, update
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .plug: "Charger connected"
+        case .charged: "Charged"
+        case .unplug: "Charger disconnected"
+        case .low: "Battery low"
+        case .critical: "Battery critical"
+        case .warning: "Warnings"
+        case .deviceLow: "Device low"
+        case .deviceFull: "Device charged"
+        case .lowPower: "Low Power Mode"
+        case .update: "New version"
+        }
+    }
+    var detail: String? {
+        switch self {
+        case .critical: "At 5% or below, and the full-screen alert."
+        case .warning: "Battery too hot, charger can't keep up."
+        default: nil
+        }
+    }
+    var defaultSound: String {
+        switch self {
+        case .plug, .charged: "Glass"
+        case .unplug: "Pop"
+        case .low: "Submarine"
+        case .critical: "Sosumi"
+        case .warning: "Funk"
+        case .deviceLow: "Bottle"
+        case .deviceFull: "Hero"
+        case .lowPower: "Purr"
+        case .update: "Ping"
+        }
+    }
+}
+
 struct DeviceRule: Codable, Equatable {
     var low: Int = 15          // 0 = don't alert
     var full: Bool = false     // alert when charged to 100%
@@ -70,7 +110,9 @@ final class Settings: ObservableObject {
     static let shared = Settings()
     private let d = UserDefaults.standard
 
-    static let sounds = ["Glass", "Ping", "Pop", "Purr", "Submarine", "Tink", "Hero", "Funk", "Bottle", "None"]
+    /// The macOS system sounds (/System/Library/Sounds).
+    static let sounds = ["Basso", "Blow", "Bottle", "Frog", "Funk", "Glass", "Hero", "Morse", "Ping", "Pop", "Purr", "Sosumi", "Submarine", "Tink"]
+    static let noSound = "None"
 
     @Published var lowAlerts: Set<Int> { didSet { d.set(Array(lowAlerts), forKey: "low") } }
     @Published var highAlerts: Set<Int> { didSet { d.set(Array(highAlerts), forKey: "high") } }
@@ -79,7 +121,20 @@ final class Settings: ObservableObject {
     @Published var fullScreenAt: Int { didSet { d.set(fullScreenAt, forKey: "fullscreen") } }   // 0 = off
     @Published var deviceLowAt: Int { didSet { d.set(deviceLowAt, forKey: "deviceLow") } }     // 0 = off
     @Published var glow: Bool { didSet { d.set(glow, forKey: "glow") } }
-    @Published var sound: String { didSet { d.set(sound, forKey: "sound") } }
+    /// Master switch: off silences every alert, but keeps the per-alert choices.
+    @Published var soundsOn: Bool { didSet { d.set(soundsOn, forKey: "soundsOn") } }
+    /// Per-alert sound; a missing key means that kind's default. "None" mutes just that alert.
+    @Published var alertSounds: [String: String] { didSet { d.set(alertSounds, forKey: "alertSounds") } }
+
+    func sound(for kind: AlertSound) -> String { alertSounds[kind.rawValue] ?? kind.defaultSound }
+    func setSound(_ name: String, for kind: AlertSound) {
+        if name == kind.defaultSound { alertSounds.removeValue(forKey: kind.rawValue) } else { alertSounds[kind.rawValue] = name }
+    }
+    /// What to play for this alert, or nil when it should be silent.
+    func soundToPlay(_ kind: AlertSound) -> String? {
+        let name = sound(for: kind)
+        return soundsOn && name != Self.noSound ? name : nil
+    }
     @Published var iconStyle: IconStyle { didSet { d.set(iconStyle.rawValue, forKey: "icon") } }
     @Published var appIcon: AppIconVariant {
         didSet {
@@ -139,7 +194,7 @@ final class Settings: ObservableObject {
     private init() {
         d.register(defaults: [
             "low": [20, 10, 5], "high": [80], "plug": true, "unplug": true,
-            "fullscreen": 3, "deviceLow": 15, "glow": true, "sound": "Glass",
+            "fullscreen": 3, "deviceLow": 15, "glow": true,
             "icon": IconStyle.inside.rawValue, "colors": true,
             "animate": true, "persistent": false, "heat": true, "trackDevices": true,
             "updateCheck": true, "updateAlert": true,
@@ -152,7 +207,9 @@ final class Settings: ObservableObject {
         fullScreenAt = d.integer(forKey: "fullscreen")
         deviceLowAt = d.integer(forKey: "deviceLow")
         glow = d.bool(forKey: "glow")
-        sound = d.string(forKey: "sound") ?? "Glass"
+        // Before per-alert sounds there was one "sound" setting; "None" there meant silence, so carry that over
+        soundsOn = d.object(forKey: "soundsOn") as? Bool ?? (d.string(forKey: "sound") != Self.noSound)
+        alertSounds = d.dictionary(forKey: "alertSounds") as? [String: String] ?? [:]
         iconStyle = IconStyle(rawValue: d.string(forKey: "icon") ?? "") ?? .inside
         appIcon = AppIconVariant(rawValue: d.string(forKey: "appIcon") ?? "") ?? .standard
         smartColors = d.bool(forKey: "colors")

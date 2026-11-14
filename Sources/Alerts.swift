@@ -11,6 +11,8 @@ struct AlertSpec {
     var buttons: [String] = []
     /// Close cross on the right: dismiss without running the pill's action.
     var closable = false
+    /// Which sound setting it plays; nil plays nothing.
+    var sound: AlertSound?
 
     var color: Color {
         switch tone {
@@ -19,6 +21,25 @@ struct AlertSpec {
         case .good: Brand.mist
         case .neutral: Brand.skyMid
         case .saver: Color(nsColor: .systemYellow)
+        }
+    }
+}
+
+extension AlertSpec {
+    /// A made-up alert of this kind, to try its sound and look from Settings → Sounds.
+    static func sample(_ kind: AlertSound) -> AlertSpec {
+        switch kind {
+        case .plug: AlertSpec(title: "Charging", subtitle: "64% · 96 W adapter", symbol: "bolt.fill", tone: .good, sound: kind)
+        case .charged: AlertSpec(title: "Charged to 80%", subtitle: "You can unplug now", symbol: "battery.100percent.bolt", tone: .good, sound: kind)
+        case .unplug: AlertSpec(title: "On battery", subtitle: "64% · 5 h 20 min left", symbol: "powerplug.fill", tone: .neutral, sound: kind)
+        case .low: AlertSpec(title: "20% left", subtitle: "About 1 h 10 min to go", symbol: "battery.25percent", tone: .low, sound: kind)
+        case .critical: AlertSpec(title: "5% left", subtitle: "Time to plug in", symbol: "battery.0percent", tone: .critical, sound: kind)
+        case .warning: AlertSpec(title: "Battery hot · 43°", subtitle: "Let the Mac cool down — heat wears the battery",
+                                 symbol: "thermometer.high", tone: .critical, sound: kind)
+        case .deviceLow: AlertSpec(title: "Magic Mouse: 10%", subtitle: "Running low — charge it soon", symbol: "magicmouse", tone: .low, sound: kind)
+        case .deviceFull: AlertSpec(title: "Magic Mouse charged", subtitle: "100% — take it off the charger", symbol: "magicmouse", tone: .good, sound: kind)
+        case .lowPower: AlertSpec(title: "Low Power Mode on", subtitle: "Dimmer, quieter, longer on battery", symbol: "leaf.fill", tone: .saver, sound: kind)
+        case .update: AlertSpec(title: "Lynx Battery", subtitle: "A new version is out · this one's a test", symbol: "arrow.down", tone: .neutral, sound: kind)
         }
     }
 }
@@ -52,11 +73,11 @@ final class AlertEngine {
                 presenter.dismissFullScreen()
                 if s.onPlug {
                     presenter.show(AlertSpec(title: "Charging", subtitle: "\(b.percent)%" + (b.adapterWatts.map { " · \($0) W adapter" } ?? " · adapter connected"),
-                                             symbol: "bolt.fill", tone: .good))
+                                             symbol: "bolt.fill", tone: .good, sound: .plug))
                 }
             } else if s.onUnplug {
                 presenter.show(AlertSpec(title: "On battery", subtitle: "\(b.percent)%" + (b.minutes.map { " · \(formatMinutes($0)) left" } ?? " · adapter disconnected"),
-                                         symbol: "powerplug.fill", tone: .neutral))
+                                         symbol: "powerplug.fill", tone: .neutral, sound: .unplug))
             }
         }
 
@@ -70,7 +91,7 @@ final class AlertEngine {
                     presenter.show(AlertSpec(title: "\(b.percent)% left",
                                              subtitle: b.minutes.map { "About \(formatMinutes($0)) to go" } ?? "Time to plug in",
                                              symbol: critical ? "battery.0percent" : "battery.25percent",
-                                             tone: critical ? .critical : .low))
+                                             tone: critical ? .critical : .low, sound: critical ? .critical : .low))
                 }
                 break
             }
@@ -79,7 +100,7 @@ final class AlertEngine {
 
         if let t = high.update(s.highAlerts, b) {
             presenter.show(AlertSpec(title: HighAlertTracker.title(t, b),
-                                     subtitle: "You can unplug now", symbol: "battery.100percent.bolt", tone: .good))
+                                     subtitle: "You can unplug now", symbol: "battery.100percent.bolt", tone: .good, sound: .charged))
         }
     }
 
@@ -93,14 +114,14 @@ final class AlertEngine {
             if r.low > 0, lvl <= r.low, !firedDevices.contains(d.name) {
                 firedDevices.insert(d.name)
                 presenter.show(AlertSpec(title: "\(d.name): \(lvl)%", subtitle: "Running low — charge it soon",
-                                         symbol: d.symbol, tone: lvl <= 5 ? .critical : .low))
+                                         symbol: d.symbol, tone: lvl <= 5 ? .critical : .low, sound: .deviceLow))
             } else if lvl > r.low + 5 {
                 firedDevices.remove(d.name)
             }
             if r.full, lvl >= 100, !firedFull.contains(d.name) {
                 firedFull.insert(d.name)
                 presenter.show(AlertSpec(title: "\(d.name) charged", subtitle: "100% — take it off the charger",
-                                         symbol: d.symbol, tone: .good))
+                                         symbol: d.symbol, tone: .good, sound: .deviceFull))
             } else if lvl < 95 {
                 firedFull.remove(d.name)
             }
@@ -112,7 +133,7 @@ final class AlertEngine {
         if t >= 42, !firedHeat {
             firedHeat = true
             presenter.show(AlertSpec(title: String(format: "Battery hot · %.0f°", t),
-                                     subtitle: "Let the Mac cool down — heat wears the battery", symbol: "thermometer.high", tone: .critical))
+                                     subtitle: "Let the Mac cool down — heat wears the battery", symbol: "thermometer.high", tone: .critical, sound: .warning))
         } else if t < 38 { firedHeat = false }
     }
 
@@ -124,7 +145,7 @@ final class AlertEngine {
             firedWeak = true
             presenter.show(AlertSpec(title: "Charger can't keep up",
                                      subtitle: String(format: "The Mac draws %.0f W and the battery still drains", b.systemWatts),
-                                     symbol: "exclamationmark.triangle.fill", tone: .low))
+                                     symbol: "exclamationmark.triangle.fill", tone: .low, sound: .warning))
         } else if !b.chargerTooWeak { firedWeak = false }
     }
 
@@ -133,7 +154,7 @@ final class AlertEngine {
     func announceUpdate(_ r: ReleaseInfo, onInstall: (() -> Void)? = nil) {
         presenter.show(AlertSpec(title: "Lynx Battery \(r.version)",
                                  subtitle: onInstall == nil ? "A new version is out · click to download" : "A new version is out · click for what's new",
-                                 symbol: "arrow.down", tone: .neutral, buttons: onInstall == nil ? [] : ["Install"], closable: true),
+                                 symbol: "arrow.down", tone: .neutral, buttons: onInstall == nil ? [] : ["Install"], closable: true, sound: .update),
                        sticky: true) { [weak self] hit in
             switch hit {
             case .body: NSWorkspace.shared.open(r.url)
@@ -180,9 +201,8 @@ final class AlertPresenter: NSObject {
     private var full: NSWindow?
     private var hideWork: DispatchWorkItem?
 
-    private func playSound() {
-        let name = Settings.shared.sound
-        guard name != "None" else { return }
+    static func play(_ kind: AlertSound?) {
+        guard let kind, let name = Settings.shared.soundToPlay(kind) else { return }
         NSSound(named: NSSound.Name(name))?.play()
     }
 
@@ -197,7 +217,7 @@ final class AlertPresenter: NSObject {
 
     private func present(_ req: Request, quiet: Bool) {
         let spec = req.spec
-        if !quiet { playSound() }
+        if !quiet { Self.play(spec.sound) }
         guard let screen = NSScreen.main else { return }
         hideWork?.cancel()
         if req.sticky { parked = nil } else if let cur = current, cur.sticky, pill != nil { parked = cur }
@@ -274,7 +294,7 @@ final class AlertPresenter: NSObject {
     }
 
     func showFullScreen(percent: Int) {
-        playSound()
+        Self.play(.critical)
         guard full == nil, let screen = NSScreen.main else { return }
         let w = KeyWindow(contentRect: screen.frame, styleMask: .borderless, backing: .buffered, defer: false)
         w.isOpaque = false

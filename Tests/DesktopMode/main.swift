@@ -136,6 +136,8 @@ model.tab = .devices
 render(model, "devices")
 render(view: GeneralSettings(model: model), "settings-general")
 render(view: AlertSettings(model: model), "settings-alerts")
+render(view: SoundSettings(model: model), "settings-sounds")
+render(view: UpdateSettings(model: model), "settings-updates")
 render(view: AboutSettings(model: model), "settings-about")
 #else
 model.refresh()

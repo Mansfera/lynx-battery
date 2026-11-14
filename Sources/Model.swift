@@ -252,7 +252,7 @@ final class AppModel: ObservableObject {
     private func announceLowPower(_ on: Bool) {
         alerts.presenter.show(AlertSpec(title: on ? "Low Power Mode on" : "Low Power Mode off",
                                         subtitle: on ? "Dimmer, quieter, longer on battery" : "Back to full performance",
-                                        symbol: on ? "leaf.fill" : "leaf", tone: on ? .saver : .neutral))
+                                        symbol: on ? "leaf.fill" : "leaf", tone: on ? .saver : .neutral, sound: .lowPower))
     }
 
     func refresh() {

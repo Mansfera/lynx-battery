@@ -89,7 +89,21 @@ Alerts appear as a pill at the top of the screen that you can drag or fling away
 - **Devices:** a low alert for devices (default 15%), which you can override per device in the Devices tab, plus an optional alert when a device is fully charged.
 - **New version:** see [Updates](#updates).
 
-Under Style you pick the sound, the screen glow, and **Keep alerts until clicked**.
+Each alert has its own sound, so you can tell them apart without looking. Settings → Sounds sets them one by one, with **None** to mute one, and **Play sounds** to mute them all. Picking a sound plays it. Hold Option and click an alert's name, or pick a sound with Option held, to also see a test alert of that kind with its sound. The defaults:
+
+| Alert | Sound |
+| --- | --- |
+| Charger connected, Charged | Glass |
+| Charger disconnected | Pop |
+| Battery low | Submarine |
+| Battery critical (5% or below, and the full-screen alert) | Sosumi |
+| Warnings (battery too hot, charger can't keep up) | Funk |
+| Device low | Bottle |
+| Device charged | Hero |
+| Low Power Mode | Purr |
+| New version | Ping |
+
+Under Style you pick the screen glow and **Keep alerts until clicked**.
 
 ## Energy tracking
 
@@ -111,7 +125,7 @@ Settings → Alerts → Devices → **Track devices** is on by default. Turn it 
 
 ## Updates
 
-Settings → Alerts → Updates has three switches:
+Settings → Updates has three switches:
 
 - **Check for new versions** (on by default): asks GitHub for the latest release 15 seconds after launch, then every 8 hours, and shortly after waking if a check is due. A newer version shows as a banner at the top of the menu with **Download**, which opens the release page, and a close button that hides the banner until the next version. Drafts and pre-releases are skipped.
 - **Alert about new versions** (on by default): an alert pill, once per version. It stays until you click it, which opens the release page, or close it, whatever **Keep alerts until clicked** says. Closing it offers to turn these alerts off. If a battery or device alert comes in meanwhile, the update alert steps aside and comes back after.
@@ -134,7 +148,9 @@ A build without release keys (the list in `Sources/UpdateKey.swift` empty) can't
 Open Settings with the gear button in the menu.
 
 - **General:** open at login, which percentage to show, the menu bar icon (percent inside, beside, icon only or percent only), colour by level, animate while charging, right-click for Low Power Mode (needs the helper), power tracking, and the app icon.
-- **Alerts:** battery alerts, devices, alert style and updates, as above.
+- **Alerts:** battery alerts, devices and alert style, as above.
+- **Sounds:** a sound for each alert, as above.
+- **Updates:** update checks, alerts and automatic installs, as above.
 - **About:** version, credits and **Quit Lynx Battery**. Quitting stops alerts and the menu bar icon, but not the charge limit: the helper keeps it without the app.
 
 ### Percentage

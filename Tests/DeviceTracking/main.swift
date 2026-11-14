@@ -82,6 +82,7 @@ check("Bluetooth still off with the menu open", model.ble.state == .unknown)
 check("no devices listed", model.devices.isEmpty)
 render(PopoverView(model: model), "popover-tracking-off")
 render(AlertSettings(model: model), "settings-alerts-tracking-off", width: 480)
+render(SoundSettings(model: model), "settings-sounds-tracking-off", width: 480)
 model.popoverShown = false
 
 // Without permission, turning it on doesn't touch Bluetooth either until Devices is opened: otherwise the process would crash here
@@ -91,6 +92,8 @@ if !model.ble.authorized {
     check("on again: Devices tab is back", model.tabs.contains(.devices))
     check("on again: no Bluetooth prompt until the Devices tab opens", model.ble.state == .unknown)
     render(AlertSettings(model: model), "settings-alerts-tracking-on", width: 480)
+    render(SoundSettings(model: model), "settings-sounds-tracking-on", width: 480)
+    render(UpdateSettings(model: model), "settings-updates", width: 480)
 
     model.tab = .devices
     model.devices = [BTDevice(name: "Magic Mouse", kind: "Mouse", main: 8)]
