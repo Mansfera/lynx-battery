@@ -102,6 +102,7 @@ Each alert has its own sound, so you can tell them apart without looking. Settin
 | Device charged | Hero |
 | Low Power Mode | Purr |
 | New version | Ping |
+| Updated (after an automatic install) | None |
 
 Under Style you pick the screen glow and **Keep alerts until clicked**.
 
@@ -127,11 +128,11 @@ Settings → Alerts → Devices → **Track devices** is on by default. Turn it 
 
 Settings → Updates has three switches:
 
-- **Check for new versions** (on by default): asks GitHub for the latest release 15 seconds after launch, then every 8 hours, and shortly after waking if a check is due. A newer version shows as a banner at the top of the menu with **Download**, which opens the release page, and a close button that hides the banner until the next version. Drafts and pre-releases are skipped.
+- **Check for new versions** (on by default): asks GitHub for the latest release 5 seconds after every launch, then every 8 hours, and shortly after waking if a check is due. A newer version shows as a banner at the top of the menu with **Download**, which opens the release page, and a close button that hides the banner until the next version. Drafts and pre-releases are skipped.
 - **Alert about new versions** (on by default): an alert pill, once per version. It stays until you click it, which opens the release page, or close it, whatever **Keep alerts until clicked** says. Closing it offers to turn these alerts off. If a battery or device alert comes in meanwhile, the update alert steps aside and comes back after.
 - **Install updates automatically** (off by default): when a new version shows up, the app downloads it, checks it, replaces itself and relaunches, with a short "Updated to X — relaunching" alert. With it off, the banner and the alert get an **Install** button that does the same once. If an install fails, the banner says why and offers Download instead.
 
-Checks happen at most once an hour, even across restarts. Offline or rate-limited, the app tries again later without telling you. The request itself is described under [Privacy](#privacy).
+So quitting and reopening the app checks right away. Between launches, checks happen at most once an hour. Offline or rate-limited, the app tries again later without telling you. The request itself is described under [Privacy](#privacy).
 
 ### How updates are verified
 

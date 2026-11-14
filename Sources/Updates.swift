@@ -62,10 +62,12 @@ final class UpdateChecker: ObservableObject {
         timer?.invalidate(); timer = nil
         objectWillChange.send()   // the banner appears or disappears along with the toggle
         guard on else { return }
-        // Not at the moment of launch. The cache from the previous run alerts even without a network
-        DispatchQueue.main.asyncAfter(deadline: .now() + 15) { [weak self] in
+        // Every launch (and turning checks on) asks GitHub right away, whenever the last check was: a quit and reopen
+        // is how people look for an update. A few seconds in, not at the moment of launch, so the network is up.
+        // The cache from the previous run alerts even without a network. With the ETag an unchanged release costs a 304.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5) { [weak self] in
             self?.announceIfNeeded()
-            self?.checkIfDue()
+            self?.check()
         }
         // The timer only wakes the deadline check: that way the 8 hours count through sleep too
         timer = Timer.scheduledTimer(withTimeInterval: 1800, repeats: true) { [weak self] _ in self?.checkIfDue() }

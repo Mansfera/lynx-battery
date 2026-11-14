@@ -62,7 +62,7 @@ enum AppTracking: String, CaseIterable, Identifiable {
 
 /// Which sound an alert plays. Each kind has its own setting, so the event can be told apart without looking.
 enum AlertSound: String, CaseIterable, Identifiable {
-    case plug, charged, unplug, low, critical, warning, deviceLow, deviceFull, lowPower, update
+    case plug, charged, unplug, low, critical, warning, deviceLow, deviceFull, lowPower, update, installed
     var id: String { rawValue }
     var title: String {
         switch self {
@@ -76,12 +76,14 @@ enum AlertSound: String, CaseIterable, Identifiable {
         case .deviceFull: "Device charged"
         case .lowPower: "Low Power Mode"
         case .update: "New version"
+        case .installed: "Updated"
         }
     }
     var detail: String? {
         switch self {
         case .critical: "At 5% or below, and the full-screen alert."
         case .warning: "Battery too hot, charger can't keep up."
+        case .installed: "After an automatic install, just before the app relaunches."
         default: nil
         }
     }
@@ -96,6 +98,7 @@ enum AlertSound: String, CaseIterable, Identifiable {
         case .deviceFull: "Hero"
         case .lowPower: "Purr"
         case .update: "Ping"
+        case .installed: Settings.noSound   // a quiet relaunch unless you pick one
         }
     }
 }

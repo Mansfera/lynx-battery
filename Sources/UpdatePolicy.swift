@@ -54,7 +54,7 @@ enum UpdatePolicy {
     static var latestURL: URL { URL(string: "https://api.github.com/repos/\(owner)/\(repo)/releases/latest")! }
     /// How often to ask GitHub. Without a token the limit is 60 requests per hour per IP; we make ~3 a day.
     static let interval: TimeInterval = 8 * 3600
-    /// No more often than this, even after the app restarts.
+    /// Between launches, no more often than this when there is no cache yet. Every launch checks regardless.
     static let minInterval: TimeInterval = 3600
 
     /// Newer than the current one. Prereleases and unparseable versions — no.

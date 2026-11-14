@@ -40,6 +40,7 @@ extension AlertSpec {
         case .deviceFull: AlertSpec(title: "Magic Mouse charged", subtitle: "100% — take it off the charger", symbol: "magicmouse", tone: .good, sound: kind)
         case .lowPower: AlertSpec(title: "Low Power Mode on", subtitle: "Dimmer, quieter, longer on battery", symbol: "leaf.fill", tone: .saver, sound: kind)
         case .update: AlertSpec(title: "Lynx Battery", subtitle: "A new version is out · this one's a test", symbol: "arrow.down", tone: .neutral, sound: kind)
+        case .installed: AlertSpec(title: "Updated", subtitle: "Relaunching… · this one's a test", symbol: "checkmark", tone: .good, sound: kind)
         }
     }
 }
@@ -167,6 +168,8 @@ final class AlertEngine {
     }
 
     func announceInstalled(_ version: String) {
+        // Quiet keeps the glow off; the sound has its own setting, None by default
+        AlertPresenter.play(.installed)
         presenter.show(AlertSpec(title: "Updated to \(version)", subtitle: "Relaunching…", symbol: "checkmark", tone: .good),
                        hideAfter: 2.5, quiet: true) { _ in }
     }

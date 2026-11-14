@@ -297,7 +297,7 @@ struct SoundSettings: View {
 
     var body: some View {
         let hasBattery = model.battery != nil
-        SettingsPane(height: hasBattery ? 760 : 440) {
+        SettingsPane(height: hasBattery ? 840 : 540) {
             Section {
                 Toggle(isOn: $s.soundsOn) {
                     Text("Play sounds")
@@ -314,7 +314,7 @@ struct SoundSettings: View {
             } header: { SectionHead("Devices") } footer: {
                 if !s.trackDevices { Text("Track devices is off in Alerts.").font(Brand.text(11)).foregroundStyle(.secondary) }
             }
-            Section { pickers([.lowPower, .update]) } header: { SectionHead("Other") }
+            Section { pickers([.lowPower, .update, .installed]) } header: { SectionHead("Other") }
         }
     }
 }
