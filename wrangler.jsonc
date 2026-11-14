@@ -1,0 +1,12 @@
+// The Lynx Battery website (site/), served as static assets by Cloudflare Workers.
+// Deploy: CLOUDFLARE_ACCOUNT_ID=8eb17a298fa81dbdc7ce60965e560962 npx wrangler deploy
+{
+  "name": "lynx-battery",
+  "compatibility_date": "2026-11-13",
+  "assets": {
+    "directory": "site"
+  },
+  "routes": [
+    { "pattern": "battery.etherlynx.xyz", "custom_domain": true }
+  ]
+}

@@ -1,0 +1,506 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lynx Battery — charge limit and power for your Mac</title>
+<meta name="description" content="A macOS menu bar app that stops your MacBook charging past a limit you set, and shows where the power goes. Free, for Apple silicon.">
+<meta name="theme-color" content="#FFFFFF">
+<meta property="og:title" content="Lynx Battery">
+<meta property="og:description" content="Stops your MacBook charging past a limit you set, and shows where the power goes.">
+<meta property="og:image" content="img/icon.webp">
+<link rel="icon" href="img/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="img/apple-touch-icon.png">
+<link rel="preload" href="fonts/Onest.ttf" as="font" type="font/ttf" crossorigin>
+<style>
+@font-face { font-family: "Onest"; src: url(fonts/Onest.ttf) format("truetype"); font-weight: 100 900; font-display: swap; }
+@font-face { font-family: "Geist Mono"; src: url(fonts/GeistMono.ttf) format("truetype"); font-weight: 100 900; font-display: swap; }
+
+/* Tokens from etherlynx.xyz, the same ones the app uses in Sources/Brand.swift */
+:root {
+  --bg: #FFFFFF;
+  --sunk: #F1F3F7;
+  --ink: #0E0E10;
+  --ink-2: #3A3D45;
+  --muted: #6A6F7C;
+  --mist: #B3BCCD;
+  --mist-text: #C2C7D1;
+  --sky-top: #A9B3C6;
+  --sky-mid: #C9D0DC;
+  --sky-low: #EEF0F3;
+  --line: rgba(14,14,16,.12);
+  --on-dark: #FFFFFF;
+  --on-dark-muted: rgba(255,255,255,.58);
+  --signal: #E8271E;
+  --font: "Onest", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --r-card: 20px;
+  --r-stage: 28px;
+  --gut: clamp(16px, 3.4vw, 48px);
+  --sec: clamp(96px, 11vw, 160px);
+  --ease: cubic-bezier(.2,.7,.2,1);
+  --sky: linear-gradient(var(--sky-top), var(--sky-mid) 45%, var(--sky-low));
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 500 16px/1.45 var(--font);
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+img { display: block; max-width: 100%; }
+a { color: inherit; }
+h1, h2, h3, p { margin: 0; }
+.wrap { padding-inline: var(--gut); max-width: 1440px; margin-inline: auto; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+:focus-visible { outline: 2px solid var(--ink); outline-offset: 3px; border-radius: 6px; }
+
+/* Header */
+.top {
+  position: fixed; inset: 0 0 auto; z-index: 20;
+  display: flex; align-items: center; justify-content: space-between;
+  height: 64px; padding-inline: var(--gut);
+  background: rgba(255,255,255,.86);
+  backdrop-filter: saturate(1.4) blur(10px);
+  -webkit-backdrop-filter: saturate(1.4) blur(10px);
+}
+.brand { display: flex; align-items: center; gap: 9px; text-decoration: none; font-size: 15px; font-weight: 600; letter-spacing: -.01em; }
+.brand svg { width: 22px; height: 22px; }
+.top nav { display: flex; align-items: center; gap: clamp(14px, 2.4vw, 28px); font-size: 14px; }
+.top nav a { text-decoration: none; color: var(--ink-2); }
+.top nav a:hover { color: var(--ink); }
+.top nav a.pill { color: #fff; }
+
+/* Ink pill */
+.pill {
+  display: inline-flex; align-items: center; gap: 10px;
+  height: 46px; padding: 0 24px; border-radius: 999px;
+  background: var(--ink); color: #fff;
+  font: 500 15px/1 var(--font); text-decoration: none; white-space: nowrap; border: 0; cursor: pointer;
+  box-shadow: 0 0 0 1px rgba(255,255,255,.12), 0 8px 20px -10px rgba(14,14,16,.5);
+  transition: background-color .2s var(--ease), transform .2s var(--ease);
+}
+.pill:hover { background: #26272C; }
+.pill:active { transform: scale(.98); }
+.pill.light { background: #fff; color: var(--ink); box-shadow: none; }
+.pill.light:hover { background: var(--sunk); }
+.pill.small { height: 36px; padding: 0 18px; font-size: 14px; }
+.pill svg { width: 16px; height: 16px; flex: none; }
+
+.tag { display: inline-block; padding: 3px 10px; border-radius: 999px; background: var(--sunk); font-size: 12px; font-weight: 500; color: var(--ink); }
+.crumbs { font-size: 13px; color: var(--muted); }
+.crumbs a { text-decoration: none; }
+.crumbs a:hover { color: var(--ink); }
+.crumbs b { color: var(--ink); font-weight: 500; }
+
+/* Hero */
+.hero { padding-top: calc(64px + clamp(40px, 7vw, 96px)); text-align: center; }
+.hero h1 { font-size: clamp(48px, 8.4vw, 112px); line-height: 1; font-weight: 500; letter-spacing: -.045em; margin-top: 18px; }
+.hero .lede { max-width: 33em; margin: 22px auto 0; font-size: clamp(16px, 1.5vw, 19px); color: var(--ink-2); text-wrap: balance; }
+.hero .act { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 12px 18px; margin-top: 30px; }
+.hero .note { font-size: 13px; color: var(--muted); }
+
+.stage {
+  position: relative; overflow: hidden;
+  margin-top: clamp(48px, 7vw, 88px);
+  height: clamp(460px, 56vw, 700px);
+  border-radius: var(--r-stage);
+  background: var(--sky);
+}
+.menubar {
+  position: absolute; inset: 0 0 auto; height: 34px;
+  display: flex; align-items: center; justify-content: flex-end; gap: 18px;
+  padding-inline: 22px;
+  background: rgba(255,255,255,.34);
+  font-size: 13px; color: var(--ink);
+}
+.menubar .bat { display: flex; align-items: center; gap: 6px; padding: 3px 7px; border-radius: 6px; background: rgba(14,14,16,.1); }
+.menubar svg { display: block; }
+.menubar .dim { color: var(--ink-2); }
+.popover {
+  position: absolute; top: 46px;
+  right: clamp(12px, 10vw, 150px);
+  width: clamp(290px, 30vw, 372px); height: auto;
+  border-radius: 18px;
+  overflow: hidden; background: #fff;
+  box-shadow: 0 0 0 .5px rgba(14,14,16,.18), 0 30px 60px -20px rgba(40,48,66,.45);
+}
+.stage .say {
+  position: absolute; left: clamp(20px, 5vw, 72px); bottom: clamp(24px, 5vw, 64px);
+  max-width: 15em; text-align: left;
+  font-size: clamp(22px, 2.7vw, 36px); line-height: 1.12; letter-spacing: -.03em; color: var(--ink);
+}
+.stage .say span { color: var(--ink-2); opacity: .7; }
+
+/* Feature tour: the scrolling word list from etherlynx.xyz, with the matching screen */
+.tour { position: relative; height: calc(100vh + var(--n) * 70vh); margin-top: var(--sec); }
+.tour-in {
+  position: sticky; top: 0; height: 100vh;
+  display: grid; align-items: center;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  grid-template-rows: 1fr auto auto 1fr;
+  column-gap: clamp(24px, 5vw, 80px);
+  padding-top: 64px;
+}
+.tour-head { grid-area: 1 / 1; align-self: end; margin-bottom: 28px; font-size: 14px; color: var(--muted); }
+.tour-list { grid-area: 2 / 1; list-style: none; margin: 0; padding: 0; }
+.tour-list button {
+  display: block; padding: 0; border: 0; background: none; cursor: pointer; text-align: left;
+  font: 500 clamp(40px, 5.2vw, 76px)/1.04 var(--font); letter-spacing: -.045em;
+  color: var(--mist-text); transition: color .4s var(--ease);
+}
+.tour-list button:hover { color: var(--mist); }
+.tour-list button[aria-current="true"] { color: var(--ink); }
+.step { display: contents; }
+.step h3 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.step .cap { grid-area: 3 / 1; align-self: start; margin-top: 30px; max-width: 30em; color: var(--ink-2); }
+.step .cap .tag { margin-left: 6px; vertical-align: 1px; }
+.step figure {
+  grid-area: 1 / 2 / 5 / 3; margin: 0; align-self: center;
+  height: min(82vh, 760px); border-radius: var(--r-stage); background: var(--sky);
+  display: flex; align-items: center; justify-content: center; padding: clamp(20px, 3vw, 40px);
+}
+.step figure img { max-height: 100%; max-width: 100%; width: auto; height: auto; min-height: 0; border-radius: 16px; box-shadow: 0 0 0 .5px rgba(14,14,16,.16), 0 24px 48px -20px rgba(40,48,66,.4); }
+.step .cap, .step figure { opacity: 0; visibility: hidden; transition: opacity .45s var(--ease), visibility 0s .45s; }
+.step.on .cap, .step.on figure { opacity: 1; visibility: visible; transition: opacity .45s var(--ease), visibility 0s; }
+
+/* Sky statement */
+.stmt {
+  margin-top: var(--sec); padding: clamp(64px, 8vw, 110px) clamp(24px, 4vw, 58px);
+  border-radius: var(--r-stage); background: var(--sky); text-align: center;
+}
+.stmt .k { font-size: 15px; color: var(--ink-2); }
+.stmt h2 { max-width: 20em; margin: 18px auto 0; font-size: clamp(26px, 3.3vw, 44px); line-height: 1.12; font-weight: 500; letter-spacing: -.035em; text-wrap: balance; }
+.stmt p.sub { max-width: 28em; margin: 22px auto 0; font-size: clamp(20px, 2.3vw, 30px); line-height: 1.2; letter-spacing: -.025em; color: var(--ink-2); text-wrap: balance; }
+.gauge { max-width: 560px; margin: clamp(40px, 5vw, 64px) auto 0; text-align: left; }
+.gauge .bar { position: relative; height: 10px; border-radius: 99px; background: rgba(255,255,255,.55); }
+.gauge .fill { position: absolute; inset: 0 20% 0 0; border-radius: 99px 0 0 99px; background: var(--ink); }
+.gauge .stop { position: absolute; left: 80%; top: -8px; bottom: -8px; width: 2px; transform: translateX(-50%); background: var(--ink); border-radius: 2px; }
+.gauge .ticks { position: relative; height: 1em; margin-top: 16px; font: 500 12px/1 var(--mono); color: var(--ink-2); }
+.gauge .ticks span { position: absolute; top: 0; }
+.gauge .ticks span:nth-child(1) { left: 0; }
+.gauge .ticks span:nth-child(2) { left: 80%; transform: translateX(-50%); }
+.gauge .ticks span:nth-child(3) { right: 0; }
+
+/* Everything else: hairline grid like the app's stat grid */
+.more { margin-top: var(--sec); }
+.more h2, .quiet h2 { font-size: clamp(36px, 5.4vw, 76px); line-height: 1; font-weight: 500; letter-spacing: -.045em; }
+.more .intro { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 16px 40px; }
+.more .intro p { max-width: 24em; color: var(--muted); }
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: clamp(40px, 5vw, 64px); border: 1px solid var(--line); border-radius: var(--r-card); overflow: hidden; }
+.grid > div { padding: clamp(24px, 3vw, 40px); border-top: 1px solid var(--line); }
+.grid > div:nth-child(-n+2) { border-top: 0; }
+.grid > div:nth-child(even) { border-left: 1px solid var(--line); }
+.grid h3 { font-size: clamp(22px, 2.2vw, 28px); font-weight: 500; letter-spacing: -.025em; }
+.grid p { margin-top: 10px; color: var(--ink-2); max-width: 34em; }
+.grid .num { font: 500 clamp(40px, 4.4vw, 60px)/1 var(--font); letter-spacing: -.04em; margin-bottom: 14px; }
+.grid .num small { font-size: .45em; color: var(--muted); letter-spacing: 0; margin-left: 2px; }
+
+/* Privacy */
+.quiet { margin-top: var(--sec); text-align: center; }
+.quiet .k { font-size: 15px; color: var(--muted); }
+.quiet h2 { margin-top: 18px; }
+.req {
+  display: inline-block; max-width: 100%; margin-top: 34px; padding: 14px 20px;
+  border-radius: 14px; background: var(--sunk);
+  font: 500 clamp(12px, 1.25vw, 15px)/1.5 var(--mono); color: var(--ink); text-align: left;
+  overflow-wrap: anywhere;
+}
+.req em { font-style: normal; color: var(--muted); }
+.quiet .after { max-width: 34em; margin: 26px auto 0; color: var(--ink-2); text-wrap: balance; }
+.facts { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 26px; }
+
+/* Footer / install */
+.foot { margin-top: var(--sec); background: var(--ink); color: var(--on-dark); padding-top: clamp(80px, 10vw, 140px); overflow: hidden; }
+.foot .k { text-align: center; font-size: 14px; color: var(--on-dark-muted); }
+.foot h2 { text-align: center; margin-top: 18px; font-size: clamp(36px, 6vw, 84px); line-height: 1; font-weight: 500; letter-spacing: -.045em; }
+.brew {
+  display: flex; align-items: center; gap: 12px;
+  max-width: 640px; margin: 40px auto 0; padding: 8px 8px 8px 22px;
+  border-radius: 999px; background: rgba(255,255,255,.08);
+  font: 500 clamp(12px, 1.4vw, 15px)/1.3 var(--mono);
+}
+.brew code { flex: 1; min-width: 0; overflow-x: auto; white-space: nowrap; scrollbar-width: none; }
+.brew code::-webkit-scrollbar { display: none; }
+.brew code span { color: var(--on-dark-muted); user-select: none; }
+.copy {
+  flex: none; height: 38px; padding: 0 16px; border-radius: 999px; border: 0; cursor: pointer;
+  background: #fff; color: var(--ink); font: 500 13px var(--font);
+}
+.foot .or { text-align: center; margin-top: 26px; font-size: 14px; color: var(--on-dark-muted); }
+.foot .dmg { display: flex; justify-content: center; margin-top: 18px; }
+.foot .fine { max-width: 32em; margin: 22px auto 0; text-align: center; font-size: 13px; color: var(--on-dark-muted); text-wrap: balance; }
+.foot .meta { display: flex; flex-wrap: wrap; justify-content: center; gap: 10px 24px; margin-top: clamp(64px, 8vw, 104px); font-size: 13px; color: var(--on-dark-muted); }
+.foot .meta a { color: #fff; text-underline-offset: 3px; }
+.foot .credit { text-align: center; margin-top: 14px; font-size: 13px; color: var(--on-dark-muted); }
+.foot .credit a { color: #fff; text-underline-offset: 3px; }
+.giant {
+  margin-top: clamp(40px, 6vw, 72px); text-align: center; white-space: nowrap;
+  font-size: 15.4vw; line-height: .8; font-weight: 600; letter-spacing: -.065em;
+  padding-top: 12px; transform: translateY(10%);
+}
+
+/* Floating download pill */
+.float { position: fixed; left: 50%; bottom: 20px; z-index: 30; transform: translate(-50%, 0); transition: transform .4s var(--ease), opacity .4s var(--ease); }
+.float.hide { transform: translate(-50%, 140%); opacity: 0; pointer-events: none; }
+
+/* Reveal on scroll */
+.rv { opacity: 0; transform: translateY(18px); transition: opacity .7s var(--ease), transform .7s var(--ease); }
+.rv.in { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  .rv { opacity: 1; transform: none; transition: none; }
+  .step .cap, .step figure, .float { transition: none; }
+}
+
+/* Narrow screens: the tour turns into a plain list of screens */
+@media (max-width: 860px) {
+  .tour { height: auto; }
+  .tour-in { position: static; height: auto; display: block; padding-top: 0; }
+  .tour-head { margin-bottom: 8px; }
+  .tour-list { display: none; }
+  .step { display: block; margin-top: 56px; }
+  .step h3 { position: static; width: auto; height: auto; overflow: visible; clip: auto; font-size: clamp(34px, 9vw, 48px); line-height: 1.04; font-weight: 500; letter-spacing: -.045em; }
+  .step .cap { margin-top: 12px; }
+  .step .cap, .step figure { opacity: 1; visibility: visible; transition: none; }
+  .step figure { height: auto; margin-top: 24px; padding: 28px 20px; }
+  .step figure img { width: min(100%, 340px); max-height: none; }
+  .grid { grid-template-columns: 1fr; }
+  .grid > div:nth-child(2) { border-top: 1px solid var(--line); }
+  .grid > div:nth-child(even) { border-left: 0; }
+  .stage { height: 540px; }
+  .popover { left: 50%; right: auto; transform: translateX(-50%); width: min(300px, calc(100% - 40px)); }
+  .stage .say { display: none; }
+  .menubar .hide-sm { display: none; }
+}
+@media (max-width: 520px) {
+  .top nav .hide-xs { display: none; }
+  .brew { border-radius: 18px; flex-direction: column; align-items: stretch; padding: 16px; }
+  .brew code { white-space: normal; overflow-wrap: anywhere; }
+}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <a class="brand" href="#" aria-label="Lynx Battery, top of page">
+    <svg viewBox="100 90 800 820" aria-hidden="true"><path fill="currentColor" fill-rule="evenodd" d="M455.6,332.0 452.8,331.3 451.1,330.4 449.6,329.1 447.8,326.8 398.8,212.8 397.5,210.3 395.0,206.5 391.0,202.6 387.2,200.1 384.5,198.9 380.1,197.5 377.2,197.1 310.5,197.0 305.3,197.6 300.8,198.9 298.5,200.0 294.2,202.9 290.2,206.9 287.7,210.8 286.4,213.5 132.8,598.6 131.9,601.2 131.0,605.4 131.0,610.6 131.7,614.9 132.6,617.5 209.4,822.7 212.0,827.8 215.0,831.6 219.0,835.1 221.7,836.8 226.3,838.6 396.3,888.9 401.0,889.8 403.9,890.0 596.1,890.0 601.0,889.6 773.4,838.7 776.3,837.7 780.6,835.4 783.1,833.5 786.5,830.0 788.3,827.4 790.6,822.7 867.4,617.5 868.3,614.9 869.0,610.6 869.0,605.4 868.1,601.2 867.2,598.6 713.6,213.5 711.3,209.0 708.1,205.0 703.8,201.3 701.5,200.0 697.2,198.2 691.7,197.1 625.0,197.0 619.9,197.5 615.5,198.9 613.2,199.9 610.6,201.4 606.7,204.6 603.8,208.1 602.2,210.7 552.6,325.9 551.7,327.6 549.7,329.8 546.3,331.6 543.4,332.0ZM343.4,259.0 346.5,259.4 349.6,260.9 352.3,263.1 353.9,265.4 406.6,387.9 408.1,390.4 410.2,392.4 412.9,393.6 415.7,394.0 584.3,394.0 587.1,393.6 588.9,392.8 591.3,391.1 593.4,387.9 646.4,265.0 648.2,262.6 650.4,260.9 653.1,259.6 655.8,259.0 659.0,259.2 661.7,260.0 664.3,261.6 666.4,263.7 668.0,266.7 802.8,604.3 803.6,607.4 803.6,610.1 802.9,613.2 740.9,778.6 739.2,781.7 736.6,784.3 732.9,786.0 590.7,827.9 410.8,828.0 407.2,827.5 267.1,786.0 263.4,784.3 260.8,781.7 259.1,778.6 197.1,613.2 196.4,610.1 196.5,606.7 197.2,604.3 332.0,266.7 334.0,263.3 336.6,260.9 339.9,259.5ZM678.0,125.0 677.7,122.3 676.9,119.6 674.8,116.1 671.8,113.4 669.4,112.1 666.7,111.3 664.0,111.0 652.0,111.0 649.3,111.3 646.6,112.1 644.2,113.4 642.1,115.1 640.4,117.2 638.6,120.9 638.0,125.0 638.1,166.4 639.1,170.4 640.4,172.8 642.1,174.9 644.2,176.6 647.9,178.4 650.6,178.9 665.4,178.9 668.1,178.4 671.8,176.6 673.9,174.9 675.6,172.8 676.9,170.4 677.9,166.4ZM362.0,125.0 361.7,122.3 360.9,119.6 358.8,116.1 355.8,113.4 353.4,112.1 350.7,111.3 348.0,111.0 336.0,111.0 333.3,111.3 330.6,112.1 328.2,113.4 326.1,115.1 324.4,117.2 322.6,120.9 322.0,125.0 322.1,166.4 323.1,170.4 324.4,172.8 326.1,174.9 328.2,176.6 331.9,178.4 334.6,178.9 349.4,178.9 352.1,178.4 355.8,176.6 357.9,174.9 359.6,172.8 360.9,170.4 361.9,166.4ZM733.9,532.0 737.9,531.4 740.4,530.4 743.7,528.0 745.5,525.9 747.2,522.2 747.8,519.5 747.8,516.8 747.3,514.1 709.6,419.5 707.2,416.2 705.0,414.4 701.3,412.6 697.2,412.0 302.8,412.0 300.1,412.3 297.4,413.1 293.9,415.2 291.9,417.2 289.8,420.8 253.1,512.8 252.4,515.4 252.1,518.1 252.4,520.9 253.2,523.5 254.5,525.9 256.3,528.0 258.4,529.7 260.8,530.9 263.4,531.7 266.1,532.0ZM593.2,808.0 597.1,807.4 718.4,771.6 722.3,769.7 725.4,766.8 727.5,763.1 748.5,706.9 749.4,703.0 749.3,700.3 748.2,696.4 746.9,694.0 744.2,691.1 741.9,689.6 739.4,688.6 735.4,688.0 264.6,688.0 260.6,688.6 258.1,689.6 255.8,691.1 253.1,694.0 251.3,697.6 250.7,700.3 250.6,703.0 251.5,706.9 272.5,763.1 273.8,765.6 275.5,767.9 277.7,769.7 281.6,771.6 402.9,807.4 405.5,807.9ZM556.0,550.0 553.3,550.3 550.6,551.1 548.2,552.4 546.1,554.1 543.7,557.4 542.6,559.9 542.1,562.6 542.0,656.0 542.3,658.7 543.7,662.6 545.2,664.9 547.1,666.8 550.6,668.9 553.3,669.7 556.0,670.0 676.0,670.0 678.7,669.7 682.6,668.3 684.9,666.8 686.8,664.9 688.9,661.4 689.7,658.7 690.0,656.0 690.0,564.0 689.7,561.3 688.3,557.4 686.8,555.1 684.9,553.2 681.4,551.1 678.7,550.3 676.0,550.0ZM324.0,550.0 321.3,550.3 318.6,551.1 316.2,552.4 314.1,554.1 311.7,557.4 310.6,559.9 310.1,562.6 310.0,656.0 310.3,658.7 311.7,662.6 313.2,664.9 315.1,666.8 318.6,668.9 321.3,669.7 324.0,670.0 444.0,670.0 446.7,669.7 450.6,668.3 452.9,666.8 454.8,664.9 456.3,662.6 457.4,660.1 458.0,656.0 458.0,564.0 457.7,561.3 456.3,557.4 454.8,555.1 452.9,553.2 449.4,551.1 446.7,550.3 444.0,550.0ZM490.0,550.0 487.3,550.3 484.6,551.1 482.2,552.4 480.1,554.1 477.7,557.4 476.6,559.9 476.1,562.6 476.0,656.0 476.3,658.7 477.7,662.6 480.1,665.9 483.4,668.3 485.9,669.4 490.0,670.0 510.0,670.0 512.7,669.7 516.6,668.3 519.9,665.9 522.3,662.6 523.4,660.1 523.9,657.4 524.0,564.0 523.7,561.3 522.3,557.4 519.9,554.1 517.8,552.4 514.1,550.6 510.0,550.0ZM722.0,550.0 719.3,550.3 716.6,551.1 714.2,552.4 712.1,554.1 709.7,557.4 708.6,559.9 708.1,562.6 708.0,656.0 708.6,660.1 710.4,663.8 712.1,665.9 715.4,668.3 719.3,669.7 722.0,670.0 752.7,670.0 756.8,669.4 759.4,668.3 762.8,665.7 764.5,663.4 765.8,660.9 783.7,612.8 784.2,608.9 783.6,605.1 765.2,558.8 763.1,555.2 761.2,553.2 757.6,551.1 753.6,550.1ZM278.0,670.0 280.7,669.7 283.4,668.9 285.8,667.6 287.9,665.9 290.3,662.6 291.4,660.1 291.9,657.4 292.0,564.0 291.4,559.9 290.3,557.4 287.9,554.1 284.6,551.7 280.7,550.3 278.0,550.0 247.8,550.0 243.7,550.6 239.9,552.4 237.8,554.2 236.0,556.3 234.8,558.8 216.4,605.1 215.8,608.9 216.3,612.8 234.2,660.9 236.3,664.6 238.3,666.6 241.8,668.9 245.9,669.9ZM689.1,394.0 692.4,393.2 694.9,390.9 696.1,387.8 695.6,384.4 662.6,301.6 660.9,299.5 658.5,298.2 656.5,297.8 653.8,298.3 651.5,299.8 649.9,302.1 614.6,384.2 614.1,386.9 614.6,389.6 615.6,391.4 617.1,392.8 619.0,393.7 620.4,394.0ZM310.2,394.0 380.3,393.9 382.3,393.2 383.9,391.9 384.8,390.9 385.4,389.6 385.9,387.6 385.8,385.6 385.4,384.2 349.8,301.5 348.0,299.4 345.6,298.1 343.5,297.8 340.9,298.4 338.6,300.0 337.1,302.2 304.4,384.4 303.9,387.1 304.4,389.7 306.4,392.4 308.2,393.5Z"/></svg>
+    Lynx Battery
+  </a>
+  <nav aria-label="Main">
+    <a class="hide-xs" href="#tour">Features</a>
+    <a class="hide-xs" href="https://github.com/Mansfera/lynx-battery/blob/main/docs/DOCUMENTATION.md">Docs</a>
+    <a href="https://github.com/Mansfera/lynx-battery">GitHub</a>
+    <a class="pill small" href="#install">Download</a>
+  </nav>
+</header>
+
+<main id="main">
+  <section class="hero wrap">
+    <p class="crumbs rv"><a href="https://etherlynx.xyz/">Etherlynx</a> / Apps / <b>Lynx Battery</b></p>
+    <h1 class="rv">Lynx Battery</h1>
+    <p class="lede rv">A menu bar app that stops your MacBook charging past the limit you set, and shows where every watt goes. Keeping it at 80% instead of 100% slows battery wear, and you never have to remember to unplug.</p>
+    <div class="act rv">
+      <a class="pill" id="heroCta" href="#install">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2.5v8M4.5 7 8 10.5 11.5 7M3 13.5h10"/></svg>
+        Download for Mac
+      </a>
+      <span class="note">Free · macOS 14 or later · Apple silicon</span>
+    </div>
+
+    <div class="stage rv" aria-label="Lynx Battery's menu open from the menu bar">
+      <div class="menubar" aria-hidden="true">
+        <span class="dim hide-sm">
+          <svg width="16" height="12" viewBox="0 0 16 12" fill="currentColor"><path d="M8 11.5 5.6 8.9a3.4 3.4 0 0 1 4.8 0zM3.4 6.7a6.6 6.6 0 0 1 9.2 0l-1.1 1.1a5 5 0 0 0-7 0zM1.2 4.5a9.7 9.7 0 0 1 13.6 0l-1.1 1.1a8.1 8.1 0 0 0-11.4 0z"/></svg>
+        </span>
+        <span class="bat">
+          <svg width="27" height="13" viewBox="0 0 27 13"><rect x=".75" y=".75" width="22.5" height="11.5" rx="3.2" fill="none" stroke="currentColor" stroke-width="1.1" opacity=".55"/><rect x="2.4" y="2.4" width="15.6" height="8.2" rx="1.8" fill="currentColor"/><path d="M24.6 4.4v4.2c.9-.3 1.4-1.1 1.4-2.1s-.5-1.8-1.4-2.1z" fill="currentColor" opacity=".55"/></svg>
+          80%
+        </span>
+        <span class="hide-sm">Sat 14 Nov</span>
+        <span>10:46</span>
+      </div>
+      <img class="popover" src="img/overview.webp" width="744" height="1430" alt="The Overview tab: 80% charge on the adapter, not charging; health 92%, 214 cycles, 29 degrees, the Mac drawing 11.4 watts, and a 24-hour charge history that sits at 80% on the charger.">
+      <p class="say">Plugged in all day.<br><span>Sitting at 80%.</span></p>
+    </div>
+  </section>
+
+  <section class="tour wrap" id="tour" style="--n:4" aria-labelledby="tourHead">
+    <div class="tour-in">
+      <h2 class="tour-head" id="tourHead">What's in the menu</h2>
+      <ol class="tour-list" aria-hidden="true">
+        <li><button type="button" data-step="0" tabindex="-1">Charge limit</button></li>
+        <li><button type="button" data-step="1" tabindex="-1">Battery health</button></li>
+        <li><button type="button" data-step="2" tabindex="-1">Where watts go</button></li>
+        <li><button type="button" data-step="3" tabindex="-1">Light on energy</button></li>
+      </ol>
+
+      <article class="step on">
+        <h3>Charge limit</h3>
+        <p class="cap">Stop at any level from 15% to full. Sailing mode waits for a real drop before charging again, heat protection pauses above 35°, and one tap tops up to full for a trip. <span class="tag">Charge tab</span></p>
+        <figure><img src="img/charge.webp" width="744" height="1438" loading="lazy" alt="The Charge tab: limit set to 80%, holding on wall power and charging again at 75%, with sailing mode, heat protection, discharge to the limit and MagSafe light switched on."></figure>
+      </article>
+
+      <article class="step">
+        <h3>Battery health</h3>
+        <p class="cap">Charge as the battery really holds it, health in mAh, cycles against what Apple rates the battery for, temperature, and history for 24 hours, 7 or 30 days. <span class="tag">Overview tab</span></p>
+        <figure><img src="img/overview.webp" width="744" height="1430" loading="lazy" alt="The Overview tab with charge, health, cycles, temperature, power draw and a dot chart of the last 24 hours."></figure>
+      </article>
+
+      <article class="step">
+        <h3>Where watts go</h3>
+        <p class="cap">Power flow from the adapter to the battery and the Mac, energy by app, and the whole Mac split into display, CPU, GPU, memory and the rest of the chip. <span class="tag">Power tab</span></p>
+        <figure><img src="img/breakdown.webp" width="688" height="740" loading="lazy" alt="The macOS row opened in the Power tab: 9.6 watts split into display, CPU, GPU, memory, Neural Engine, video and camera, rest of chip and everything else, with Wi-Fi, SSD and audio activity."></figure>
+      </article>
+
+      <article class="step">
+        <h3>Light on energy</h3>
+        <p class="cap">A battery app shouldn't drain the battery. Choose how often it measures, or switch on Minimal energy use: the charge limit and alerts keep working. <span class="tag">Power tab</span></p>
+        <figure><img src="img/power.webp" width="744" height="960" loading="lazy" alt="The Power tab with the power flow at 9.5 watts and the Minimal energy use switch turned on."></figure>
+      </article>
+    </div>
+  </section>
+
+  <section class="wrap">
+    <div class="stmt rv">
+      <p class="k">Why stop at 80%</p>
+      <h2>Lithium cells wear fastest when they sit full and warm.</h2>
+      <p class="sub">A MacBook on a desk sits full and warm most of the day. Lynx Battery holds it lower, then gets out of the way.</p>
+      <div class="gauge" aria-hidden="true">
+        <div class="bar"><div class="fill"></div><div class="stop"></div></div>
+        <div class="ticks"><span>0</span><span>80</span><span>100</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="more wrap" aria-labelledby="moreHead">
+    <div class="intro rv">
+      <h2 id="moreHead">And the rest</h2>
+      <p>The things you would otherwise check in four places, in one menu that stays out of the way.</p>
+    </div>
+    <div class="grid rv">
+      <div>
+        <h3>Devices</h3>
+        <p>AirPods left, right and case, Magic Mouse, Keyboard and Trackpad, a nearby iPhone or iPad. Set a low alert per device, or turn tracking off and nothing touches Bluetooth.</p>
+      </div>
+      <div>
+        <h3>Alerts you can fling away</h3>
+        <p>Low, charged, charger and temperature alerts as a pill at the top of the screen. When the battery is nearly empty, a full-screen alert you can't miss.</p>
+      </div>
+      <div>
+        <h3>Updates signed on a YubiKey</h3>
+        <p>Every release is signed with a hardware key. The app checks the signature and the checksum itself before it replaces anything, and Homebrew installs stay Homebrew's.</p>
+      </div>
+      <div>
+        <h3>Macs without a battery</h3>
+        <p>On an iMac, Mac mini or Mac Studio the menu bar shows the Mac's live power draw instead, with energy by app and your devices underneath.</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="quiet wrap" aria-labelledby="quietHead">
+    <p class="k rv">Privacy</p>
+    <h2 class="rv" id="quietHead">One network request.</h2>
+    <p class="req rv"><em>GET</em> api.github.com/repos/Mansfera/lynx-battery/releases/latest</p>
+    <p class="after rv">The update check. No cookies, nothing about you or your Mac. Turn it off and the app makes no requests at all. Everything else is read on the Mac and stays there.</p>
+    <div class="facts rv">
+      <span class="tag">No account</span>
+      <span class="tag">No analytics</span>
+      <span class="tag">Source on GitHub</span>
+    </div>
+  </section>
+</main>
+
+<footer class="foot" id="install">
+  <div class="wrap">
+    <p class="k">Free, for macOS 14 or later on Apple silicon</p>
+    <h2>Install Lynx Battery</h2>
+    <div class="brew">
+      <code id="brewCmd"><span aria-hidden="true">$ </span>brew install --cask mansfera/tap/lynx-battery</code>
+      <button class="copy" type="button" id="copyBtn">Copy</button>
+    </div>
+    <p class="or">or</p>
+    <div class="dmg">
+      <a class="pill light" href="https://github.com/Mansfera/lynx-battery/releases/latest">Download the DMG</a>
+    </div>
+    <p class="fine">The app isn't notarized, so the first launch from the DMG needs right-click → Open. To limit charging, open the Charge tab and click Install helper; macOS asks for your password once.</p>
+
+    <div class="meta">
+      <a href="https://github.com/Mansfera/lynx-battery/blob/main/docs/DOCUMENTATION.md">Documentation</a>
+      <a href="https://github.com/Mansfera/lynx-battery/releases">Releases</a>
+      <a href="https://github.com/Mansfera/lynx-battery">Source</a>
+    </div>
+    <p class="credit">Designed and developed by <a href="https://etherlynx.xyz/">Etherlynx Studio</a> and <a href="https://kharkholy.uk">Ihor Kharkholyuk</a>. Made with Claude.</p>
+  </div>
+  <div class="giant" aria-hidden="true">Lynx Battery</div>
+</footer>
+
+<a class="pill float hide" id="float" href="#install">Download for Mac</a>
+
+<script>
+(() => {
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // Reveal on scroll
+  const io = new IntersectionObserver(es => es.forEach(e => {
+    if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); }
+  }), { rootMargin: "0px 0px -8% 0px" });
+  document.querySelectorAll(".rv").forEach(el => io.observe(el));
+
+  // Tour: scroll position picks the step
+  const tour = document.querySelector(".tour");
+  const steps = [...tour.querySelectorAll(".step")];
+  const btns = [...tour.querySelectorAll(".tour-list button")];
+  const wide = matchMedia("(min-width: 861px)");
+  let cur = -1;
+  const show = i => {
+    if (i === cur) return;
+    cur = i;
+    steps.forEach((s, k) => s.classList.toggle("on", k === i));
+    btns.forEach((b, k) => b.setAttribute("aria-current", k === i ? "true" : "false"));
+  };
+  const onScroll = () => {
+    if (!wide.matches) return;
+    const r = tour.getBoundingClientRect();
+    const span = r.height - innerHeight;
+    const p = Math.min(.999, Math.max(0, -r.top / span));
+    show(Math.floor(p * steps.length));
+  };
+  btns.forEach((b, i) => b.addEventListener("click", () => {
+    const span = tour.offsetHeight - innerHeight;
+    scrollTo({ top: tour.offsetTop + span * (i + .5) / steps.length, behavior: reduce ? "auto" : "smooth" });
+  }));
+  show(0);
+
+  // Floating pill: after the hero button scrolls away, until the install section
+  const float = document.getElementById("float");
+  const hero = document.getElementById("heroCta");
+  const foot = document.getElementById("install");
+  const onFloat = () => {
+    const past = hero.getBoundingClientRect().bottom < 64;
+    const atFoot = foot.getBoundingClientRect().top < innerHeight * .85;
+    float.classList.toggle("hide", !past || atFoot);
+  };
+
+  addEventListener("scroll", () => { onScroll(); onFloat(); }, { passive: true });
+  addEventListener("resize", () => { onScroll(); onFloat(); });
+  onScroll(); onFloat();
+
+  // Copy the brew command
+  const btn = document.getElementById("copyBtn");
+  btn.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText("brew install --cask mansfera/tap/lynx-battery");
+      btn.textContent = "Copied";
+    } catch { btn.textContent = "Select and copy"; }
+    setTimeout(() => btn.textContent = "Copy", 1600);
+  });
+})();
+</script>
+</body>
+</html>
