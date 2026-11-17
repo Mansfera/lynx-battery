@@ -18,7 +18,7 @@ esac
 
 swiftc Sources/*.swift ${SIM[@]+"${SIM[@]}"} \
     -o "$APP/Contents/MacOS/LynxBattery" \
-    -framework Cocoa -framework IOKit -framework SwiftUI -framework ServiceManagement -framework CoreBluetooth \
+    -framework Cocoa -framework IOKit -framework SwiftUI -framework ServiceManagement -framework CoreBluetooth -framework GameController \
     -swift-version 5 \
     -target arm64-apple-macos14.0 \
     -O

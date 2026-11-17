@@ -42,7 +42,7 @@ The charge limit and its options. See [Charge limit](#charge-limit).
 
 ### Devices
 
-Battery levels for AirPods (left, right and case, even before they connect), Magic Mouse, Keyboard and Trackpad, a paired iPhone or iPad nearby, and other connected devices that expose the Bluetooth Battery Service. Click a device to set its own low alert, get an alert when it's full, or hide it.
+Battery levels for AirPods (left, right and case, even before they connect), Magic Mouse, Keyboard and Trackpad, DualSense, DualShock 4 and Xbox Wireless controllers over Bluetooth, a paired iPhone or iPad nearby, and other connected devices that expose the Bluetooth Battery Service. Click a device to set its own low alert, get an alert when it's full, or hide it.
 
 macOS asks for Bluetooth access the first time you open this tab. Until you allow it, iPhone, iPad and other Battery Service devices don't show up or send alerts. Apple Watch only reports its battery through the iPhone, so it isn't shown.
 
@@ -122,7 +122,7 @@ Only these scheduled samples go into the history, so it stays even over time and
 
 ## Track devices
 
-Settings → Alerts → Devices → **Track devices** is on by default. Turn it off and the Devices tab disappears, and the app stops reading devices altogether: no Bluetooth scans or connections, no `system_profiler` or `ioreg` reads, no device alerts. It doesn't ask for Bluetooth access while it's off. Turning it back on picks up right away, no relaunch needed.
+Settings → Alerts → Devices → **Track devices** is on by default. Turn it off and the Devices tab disappears, and the app stops reading devices altogether: no Bluetooth scans or connections, no `system_profiler` or `ioreg` reads, no game controller watching, no device alerts. It doesn't ask for Bluetooth access while it's off. Turning it back on picks up right away, no relaunch needed.
 
 ## Updates
 
@@ -176,7 +176,7 @@ Lynx Battery reads, all locally:
 
 - Battery and power-source data from IOKit, and SMC keys for temperature and power.
 - Energy per process from `top`, and the chip's energy counters (IOReport) while the macOS breakdown is open.
-- Paired Bluetooth devices from `system_profiler` and `ioreg`, and battery levels over the Bluetooth Battery Service from devices whose name matches one paired with this Mac.
+- Paired Bluetooth devices from `system_profiler` and `ioreg`, battery levels over the Bluetooth Battery Service from devices whose name matches one paired with this Mac, and game controller battery levels from Apple's GameController framework. It never reads controller input.
 
 It stores history and energy data in `~/Library/Application Support/com.mansfera.lynxbattery/`, its settings in `~/Library/Preferences/com.mansfera.lynxbattery.plist`, and the charge-limit settings and helper status in `/Library/Application Support/com.mansfera.lynxbattery/`.
 

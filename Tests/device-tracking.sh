@@ -10,7 +10,7 @@ trap 'rm -rf "$TMP"; rm -f "$HOME/Library/Preferences/device-tracking.plist"' EX
 SOURCES=()
 for f in Sources/*.swift; do [ "$f" = Sources/main.swift ] || SOURCES+=("$f"); done
 swiftc "${SOURCES[@]}" Tests/DeviceTracking/main.swift -o "$TMP/device-tracking" \
-    -framework Cocoa -framework IOKit -framework SwiftUI -framework ServiceManagement -framework CoreBluetooth \
+    -framework Cocoa -framework IOKit -framework SwiftUI -framework ServiceManagement -framework CoreBluetooth -framework GameController \
     -swift-version 5 -target arm64-apple-macos14.0
 CFFIXED_USER_HOME="$TMP" "$TMP/device-tracking" "$OUT" Resources/Fonts
 echo; echo "PNGs: $OUT"

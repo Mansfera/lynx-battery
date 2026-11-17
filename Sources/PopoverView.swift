@@ -1270,7 +1270,7 @@ struct DevicesTab: View {
                 Stage {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("No devices connected").font(Brand.display(20))
-                        Text("AirPods, Magic Mouse, Keyboard and Trackpad show up here while they're connected. Your iPhone and iPad appear when they're nearby. Apple Watch only reports through the iPhone, so it isn't shown.")
+                        Text("AirPods, Magic Mouse, Keyboard, Trackpad and PlayStation or Xbox controllers show up here while they're connected. Your iPhone and iPad appear when they're nearby. Apple Watch only reports through the iPhone, so it isn't shown.")
                             .font(Brand.text(11.5)).foregroundStyle(pal.fg.opacity(0.65)).fixedSize(horizontal: false, vertical: true)
                     }
                 }

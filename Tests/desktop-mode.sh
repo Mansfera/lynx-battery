@@ -15,7 +15,7 @@ run() {   # name, compile flags
     local name="$1"; shift
     echo; echo "=== $name"
     swiftc "${SOURCES[@]}" Tests/DesktopMode/main.swift "$@" -o "$TMP/$name" \
-        -framework Cocoa -framework IOKit -framework SwiftUI -framework ServiceManagement -framework CoreBluetooth \
+        -framework Cocoa -framework IOKit -framework SwiftUI -framework ServiceManagement -framework CoreBluetooth -framework GameController \
         -swift-version 5 -target arm64-apple-macos14.0
     mkdir -p "$TMP/home-$name"
     CFFIXED_USER_HOME="$TMP/home-$name" "$TMP/$name" "$OUT/$name" Resources/Fonts

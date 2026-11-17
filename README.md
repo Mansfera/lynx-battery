@@ -21,7 +21,7 @@ To limit charging, open the Charge tab and click **Install helper**. macOS asks 
 - **Overview:** charge, time left, battery health, cycles, temperature, and 24-hour to 30-day history.
 - **Charge limit:** stop at any level from 15% to full, with sailing mode, heat protection, discharge to the limit and a one-time top-up.
 - **Power:** where the power goes, from the adapter to the battery and the Mac, energy use by app, and a live breakdown of the whole Mac.
-- **Devices:** battery levels for AirPods, Magic accessories, a nearby iPhone or iPad and other Bluetooth devices. You can turn it off.
+- **Devices:** battery levels for AirPods, Magic accessories, PlayStation and Xbox controllers, a nearby iPhone or iPad and other Bluetooth devices. You can turn it off.
 - **Alerts:** low, charged, charger and temperature alerts as a pill you can fling away, plus a full-screen alert when the battery is nearly empty.
 - **Updates:** tells you when a new version is out, and can install it for you.
 - **Light on energy:** choose how often it measures, or turn on Minimal energy use.

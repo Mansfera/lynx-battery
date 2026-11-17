@@ -39,6 +39,7 @@ final class AppModel: ObservableObject {
     let energy = EnergyMonitor()
     let charge = ChargeControl()
     let ble = BLEBattery()
+    let controllers = ControllerBattery()
     private var classicDevices: [BTDevice] = []
     private var energyTimer: Timer?
     private var liveEnergyTimer: Timer?
@@ -73,6 +74,8 @@ final class AppModel: ObservableObject {
         // The icon shows the helper's state, so redraw it as soon as that changes
         chargeStatus = charge.$status.map { $0?.wallHold }.removeDuplicates().receive(on: DispatchQueue.main).sink { [weak self] _ in self?.onChange?() }
         ble.onChange = { [weak self] in self?.mergeDevices() }
+        // A controller that connects or leaves shows up right away. Minimal mode skips the system_profiler read until the popover opens
+        controllers.onChange = { [weak self] in Settings.shared.minimalEnergy ? self?.mergeDevices() : self?.refreshDevices() }
         energyMode = Settings.shared.$minimalEnergy.dropFirst().receive(on: DispatchQueue.main).sink { [weak self] _ in self?.applyEnergyMode() }
         deviceTracking = Settings.shared.$trackDevices.dropFirst().removeDuplicates().receive(on: DispatchQueue.main).sink { [weak self] _ in self?.applyDeviceTracking() }
         trackingMode = Settings.shared.$appTracking.combineLatest(Settings.shared.$livePowerTab).dropFirst()
@@ -118,11 +121,14 @@ final class AppModel: ObservableObject {
         deviceTimer?.invalidate(); deviceTimer = nil
         guard Settings.shared.trackDevices else {
             ble.stop()
+            controllers.stop()
             classicDevices = []
             if tab == .devices { tab = firstTab }
             if !devices.isEmpty { devices = []; onChange?() }
             return
         }
+        // Controllers cost nothing to watch: no scans or connections, only connect notifications
+        controllers.start()
         if Settings.shared.minimalEnergy {
             // Read devices only when the popover opens; don't leave old numbers looking live
             ble.stop()
@@ -315,11 +321,11 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// Classic Bluetooth (system_profiler) + BLE Battery Service; duplicates by name are merged.
+    /// Classic Bluetooth (system_profiler) + BLE Battery Service + game controllers; duplicates by name are merged.
     private func mergeDevices() {
         guard Settings.shared.trackDevices else { return }
         var list = classicDevices
-        for d in ble.devices { DeviceReader.absorb(d, into: &list) }
+        for d in ble.devices + controllers.devices { DeviceReader.absorb(d, into: &list) }
         list.sort { ($0.lowest ?? 101) < ($1.lowest ?? 101) }
         devices = list
         alerts.evaluate(devices: list)

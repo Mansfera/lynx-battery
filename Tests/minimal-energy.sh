@@ -10,7 +10,7 @@ trap 'rm -rf "$TMP"; rm -f "$HOME/Library/Preferences/minimal-energy.plist"' EXI
 SOURCES=()
 for f in Sources/*.swift; do [ "$f" = Sources/main.swift ] || SOURCES+=("$f"); done
 swiftc "${SOURCES[@]}" Tests/MinimalEnergy/main.swift -o "$TMP/minimal-energy" \
-    -framework Cocoa -framework IOKit -framework SwiftUI -framework ServiceManagement -framework CoreBluetooth \
+    -framework Cocoa -framework IOKit -framework SwiftUI -framework ServiceManagement -framework CoreBluetooth -framework GameController \
     -swift-version 5 -target arm64-apple-macos14.0
 CFFIXED_USER_HOME="$TMP" "$TMP/minimal-energy" "$OUT" Resources/Fonts
 echo; echo "PNGs: $OUT"
