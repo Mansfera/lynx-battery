@@ -176,7 +176,7 @@ Lynx Battery reads, all locally:
 
 - Battery and power-source data from IOKit, and SMC keys for temperature and power.
 - Energy per process from `top`, and the chip's energy counters (IOReport) while the macOS breakdown is open.
-- Paired Bluetooth devices from `system_profiler` and `ioreg`, battery levels over the Bluetooth Battery Service from devices whose name matches one paired with this Mac, and game controller battery levels from Apple's GameController framework. It never reads controller input.
+- Paired Bluetooth devices from `system_profiler` and `ioreg`, battery levels over the Bluetooth Battery Service from devices whose name matches one paired with this Mac, and game controller battery levels: PlayStation controllers from the battery byte of a single HID report per refresh (the controller is opened only for that moment, and buttons, sticks and motion in the report are ignored), Xbox controllers from Apple's GameController framework.
 
 It stores history and energy data in `~/Library/Application Support/com.mansfera.lynxbattery/`, its settings in `~/Library/Preferences/com.mansfera.lynxbattery.plist`, and the charge-limit settings and helper status in `/Library/Application Support/com.mansfera.lynxbattery/`.
 

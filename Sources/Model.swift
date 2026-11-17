@@ -76,6 +76,8 @@ final class AppModel: ObservableObject {
         ble.onChange = { [weak self] in self?.mergeDevices() }
         // A controller that connects or leaves shows up right away. Minimal mode skips the system_profiler read until the popover opens
         controllers.onChange = { [weak self] in Settings.shared.minimalEnergy ? self?.mergeDevices() : self?.refreshDevices() }
+        // A controller's level arrives just after it connects; show it then, not at the next refresh
+        controllers.onLevel = { [weak self] in self?.mergeDevices() }
         energyMode = Settings.shared.$minimalEnergy.dropFirst().receive(on: DispatchQueue.main).sink { [weak self] _ in self?.applyEnergyMode() }
         deviceTracking = Settings.shared.$trackDevices.dropFirst().removeDuplicates().receive(on: DispatchQueue.main).sink { [weak self] _ in self?.applyDeviceTracking() }
         trackingMode = Settings.shared.$appTracking.combineLatest(Settings.shared.$livePowerTab).dropFirst()
@@ -317,6 +319,7 @@ final class AppModel: ObservableObject {
                 self?.ble.paired = paired.filter { name, _ in !list.contains { $0.name == name && $0.lowest != nil } }
                 self?.mergeDevices()
                 self?.ble.poll()
+                self?.controllers.poll()
             }
         }
     }
