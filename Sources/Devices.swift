@@ -10,6 +10,11 @@ struct BTDevice: Identifiable, Equatable {
     var right: Int?
     var caseLevel: Int?
     var address: String?
+    /// Parts that report charging. AirPods charge per part: the earbuds in the case can charge while the case doesn't.
+    /// Comes with the same reads as the levels, so it costs nothing extra.
+    var charging: Set<Part> = []
+
+    enum Part: Hashable { case main, left, right, caseUnit }
 
     init(name: String, kind: String, main: Int? = nil, left: Int? = nil, right: Int? = nil, caseLevel: Int? = nil) {
         self.name = name; self.kind = kind; self.main = main; self.left = left; self.right = right; self.caseLevel = caseLevel
@@ -19,9 +24,11 @@ struct BTDevice: Identifiable, Equatable {
     var lowest: Int? { [main, left, right].compactMap { $0 }.min() }
 
     /// Fills empty levels from another source: the same device is often seen by several.
+    /// Charging is a union: system_profiler never reports it, the power sources do.
     mutating func fill(from o: BTDevice) {
         main = main ?? o.main; left = left ?? o.left; right = right ?? o.right; caseLevel = caseLevel ?? o.caseLevel
         if kind.isEmpty { kind = o.kind }
+        charging.formUnion(o.charging)
     }
 
     var symbol: String {
@@ -84,12 +91,14 @@ enum DeviceReader {
             let group = (info["Accessory Identifier"] as? String) ?? (info["Group Identifier"] as? String) ?? name
             let part = info["Part Identifier"] as? String
             var d = out[group] ?? BTDevice(name: name, kind: "")
+            let which: BTDevice.Part
             switch part {
-            case "Left": d.left = level
-            case "Right": d.right = level
-            case "Case": d.caseLevel = level
-            default: d.main = level
+            case "Left": d.left = level; which = .left
+            case "Right": d.right = level; which = .right
+            case "Case": d.caseLevel = level; which = .caseUnit
+            default: d.main = level; which = .main
             }
+            if (info["Is Charging"] as? Bool) == true { d.charging.insert(which) }
             // Take the name and type from the device itself, not from the case ("AirPods Case")
             if part != "Case" {
                 d.name = name

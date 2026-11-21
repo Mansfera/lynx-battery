@@ -1334,10 +1334,10 @@ struct DeviceRow: View {
             Text("No battery info").font(Brand.text(11)).foregroundStyle(pal.muted)
         } else {
             HStack(spacing: 8) {
-                if let l = device.left { Part(label: "L", p: l) }
-                if let x = device.right { Part(label: "R", p: x) }
-                if let m = device.main, device.left == nil, device.right == nil { Part(label: nil, p: m) }
-                if let c = device.caseLevel { Part(label: "Case", p: c) }
+                if let l = device.left { Part(label: "L", p: l, charging: device.charging.contains(.left)) }
+                if let x = device.right { Part(label: "R", p: x, charging: device.charging.contains(.right)) }
+                if let m = device.main, device.left == nil, device.right == nil { Part(label: nil, p: m, charging: device.charging.contains(.main)) }
+                if let c = device.caseLevel { Part(label: "Case", p: c, charging: device.charging.contains(.caseUnit)) }
             }
         }
     }
@@ -1350,11 +1350,19 @@ struct DeviceRow: View {
 
 struct Part: View {
     let label: String?, p: Int
+    var charging = false
     @Environment(\.palette) private var pal
     var body: some View {
         HStack(spacing: 3) {
             if let label { Text(label).font(Brand.text(10.5)).foregroundStyle(pal.muted) }
-            Text("\(p)%").font(Brand.mono(11, .semibold)).foregroundStyle(pal.level(p))
+            // Bolt sits tight against the number, green like the Mac's own charging state
+            HStack(spacing: 1) {
+                if charging { Image(systemName: "bolt.fill").font(.system(size: 8, weight: .semibold)) }
+                Text("\(p)%").font(Brand.mono(11, .semibold))
+            }
+            .foregroundStyle(pal.level(p, charging: charging))
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(charging ? "\(p)%, charging" : "\(p)%")
         }
     }
 }

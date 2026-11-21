@@ -49,11 +49,17 @@ final class ControllerBattery {
     /// Main thread only. Wired Xbox controllers and ones whose charge isn't known yet are left out.
     var devices: [BTDevice] {
         guard !observers.isEmpty else { return [] }
-        var list = pads.compactMap { p in p.level.map { BTDevice(name: p.name, kind: "Gamepad", main: $0) } }
+        var list = pads.compactMap { p in p.level.map { level in
+            var d = BTDevice(name: p.name, kind: "Gamepad", main: level)
+            if p.charging { d.charging = [.main] }
+            return d
+        } }
         for c in GCController.controllers() {
             guard let b = c.battery, Self.known(b), let name = c.vendorName, !name.isEmpty,
                   !list.contains(where: { $0.name == name }) else { continue }
-            list.append(BTDevice(name: name, kind: "Gamepad", main: min(100, max(0, Int((b.batteryLevel * 100).rounded())))))
+            var d = BTDevice(name: name, kind: "Gamepad", main: min(100, max(0, Int((b.batteryLevel * 100).rounded()))))
+            if b.batteryState == .charging { d.charging = [.main] }
+            list.append(d)
         }
         return list
     }
@@ -134,6 +140,8 @@ final class SonyPad {
     let name: String
     let isDualSense: Bool
     private(set) var level: Int?
+    /// On the cable and not yet full
+    private(set) var charging = false
     var onLevel: (() -> Void)?
     private let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: SonyPad.bufferSize)
     private var reading = false
@@ -159,8 +167,8 @@ final class SonyPad {
         IOHIDDeviceRegisterInputReportCallback(device, buffer, Self.bufferSize, { ctx, _, _, _, _, report, length in
             guard let ctx else { return }
             let pad = Unmanaged<SonyPad>.fromOpaque(ctx).takeUnretainedValue()
-            guard let level = SonyPad.level(UnsafeBufferPointer(start: report, count: length), dualSense: pad.isDualSense) else { return }
-            pad.finish(level)
+            guard let state = SonyPad.state(UnsafeBufferPointer(start: report, count: length), dualSense: pad.isDualSense) else { return }
+            pad.finish(state)
         }, Unmanaged.passUnretained(self).toOpaque())
         IOHIDDeviceScheduleWithRunLoop(device, CFRunLoopGetMain(), CFRunLoopMode.defaultMode.rawValue)
         // A controller in its basic Bluetooth mode sends reports without the charge: give up rather than keep listening
@@ -170,9 +178,9 @@ final class SonyPad {
         }
     }
 
-    private func finish(_ new: Int) {
+    private func finish(_ new: (level: Int, charging: Bool)) {
         cancel()
-        if new != level { level = new; onLevel?() }
+        if new.level != level || new.charging != charging { level = new.level; charging = new.charging; onLevel?() }
     }
 
     /// Stops listening and closes the controller. Must run before the pad is dropped: the callback holds it unretained.
@@ -184,9 +192,10 @@ final class SonyPad {
         IOHIDDeviceClose(device, IOOptionBits(kIOHIDOptionsTypeNone))
     }
 
-    /// Charge in percent from one input report (report ID first), at the offsets Linux's hid-playstation and hid-sony use.
-    /// The controller reports tenths, so 8 means 80–89% and we show the middle, 85%. nil for reports without the charge.
-    static func level(_ r: UnsafeBufferPointer<UInt8>, dualSense: Bool) -> Int? {
+    /// Charge in percent and whether it's charging, from one input report (report ID first), at the offsets
+    /// Linux's hid-playstation and hid-sony use. The controller reports tenths, so 8 means 80–89% and we show the middle, 85%.
+    /// nil for reports without the charge.
+    static func state(_ r: UnsafeBufferPointer<UInt8>, dualSense: Bool) -> (level: Int, charging: Bool)? {
         let at: Int
         switch (dualSense, r.first) {
         case (true, 0x01) where r.count >= 64: at = 53    // USB
@@ -196,14 +205,18 @@ final class SonyPad {
         default: return nil
         }
         let level = Int(r[at] & 0x0F)
+        let charging: Bool
         if dualSense {
             switch r[at] >> 4 {
-            case 0, 1: break        // discharging, charging
-            case 2: return 100      // full
-            default: return nil     // charging error: temperature or voltage out of range
+            case 0: charging = false
+            case 1: charging = true
+            case 2: return (100, false)   // full
+            default: return nil           // charging error: temperature or voltage out of range
             }
+        } else {
+            // Bit 4 is the cable. DualShock 4 counts to 10 while charging and shows 11 once full on the cable
+            charging = r[at] & 0x10 != 0 && level <= 10
         }
-        // DualShock 4 counts to 11 while on the cable
-        return min(100, min(level, 10) * 10 + 5)
+        return (min(100, min(level, 10) * 10 + 5), charging)
     }
 }
