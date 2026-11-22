@@ -53,6 +53,7 @@ ditto "$APP" "build/dmg/$APP"
 ln -s /Applications build/dmg/Applications
 DMG="dist/Lynx-Battery-$V.dmg"
 hdiutil create -volname "Lynx Battery" -srcfolder build/dmg -ov -format UDZO "$DMG" >/dev/null
+rm -rf build/dmg  # the staging copy of the app is only needed inside the DMG
 SHA=$(shasum -a 256 "$DMG" | cut -d' ' -f1)
 echo "DMG $DMG  sha256 $SHA"
 build/update-sig message "$DMG" "$V" > "build/Lynx-Battery-$V.msg"
@@ -106,4 +107,5 @@ sed -e "s/__VERSION__/$V/" -e "s/__SHA256__/$SHA/" Homebrew/lynx-battery.rb > "$
 git -C "$TAP" add Casks/lynx-battery.rb
 git -C "$TAP" commit -m "lynx-battery $V"
 git -C "$TAP" push -q
+rm -rf "$TAP"
 echo "✅ Released $V — brew install --cask mansfera/tap/lynx-battery"
